@@ -1,0 +1,52 @@
+groups:
+  - name: quant_alerts
+    rules:
+      # 后端服务 down
+      - alert: BackendDown
+        expr: up{job="quant-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "后端服务不可用"
+          description: "OpenClaw后端服务 {{ $labels.instance }} 已经超过1分钟不可达"
+
+      # 数据库 down
+      - alert: DatabaseDown
+        expr: up{job="mysql"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "数据库不可用"
+          description: "MySQL数据库 {{ $labels.instance }} 已经超过1分钟不可达"
+
+      # 高CPU使用率
+      - alert: HighCPUUsage
+        expr: 100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU使用率过高"
+          description: "实例 {{ $labels.instance }} CPU使用率超过80%"
+
+      # 低磁盘空间
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes * 100 / node_filesystem_size_bytes) < 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "磁盘空间不足"
+          description: "挂载点 {{ $labels.mountpoint }} 剩余空间小于10%"
+
+      # API错误率过高
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API错误率过高"
+          description: "后端API 5xx错误率超过5%"

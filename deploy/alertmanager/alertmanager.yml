@@ -1,0 +1,50 @@
+global:
+  # 企业微信配置示例
+  # wechat_api_url: 'https://qyapi.weixin.qq.com/cgi-bin/'
+  # wechat_corp_id: 'your_corp_id'
+  # wechat_agent_id: 'your_agent_id'
+  # wechat_corp_secret: 'your_corp_secret'
+
+  # 钉钉配置示例
+  # dingtalk_api_url: 'https://oapi.dingtalk.com/robot/send'
+  # dingtalk_access_token: 'your_access_token'
+
+route:
+  group_by: ['alertname']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  receiver: 'web.hook'
+  # 根据级别路由
+  routes:
+    - match_re:
+        severity: critical
+      receiver: 'critical_alerts'
+    - match_re:
+        severity: warning
+      receiver: 'warning_alerts'
+
+receivers:
+  # Webhook示例（发送到Feishu/企业微信/钉钉）
+  - name: 'web.hook'
+    webhook_configs:
+      - url: 'YOUR_WEBHOOK_URL'
+
+  # 企业微信接收严重告警
+  - name: 'critical_alerts'
+    wechat_configs:
+      - corp_id: 'YOUR_CORP_ID'
+        agent_id: 'YOUR_AGENT_ID'
+        api_secret: 'YOUR_SECRET'
+        message: '{{ template \"wechat.default.message\" . }}'
+
+  # 默认警告接收
+  - name: 'warning_alerts'
+    wechat_configs:
+      - corp_id: 'YOUR_CORP_ID'
+        agent_id: 'YOUR_AGENT_ID'
+        api_secret: 'YOUR_SECRET'
+        message: '{{ template \"wechat.default.message\" . }}'
+
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'

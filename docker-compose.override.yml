@@ -1,0 +1,17 @@
+# 开发环境覆盖配置
+# 此文件不加入版本控制，用于本地开发覆盖配置
+
+version: '3.8'
+
+services:
+  backend:
+    # 开发环境开启调试和卷挂载
+    volumes:
+      - ./backend:/app
+      - ./logs:/app/logs
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # 开发环境暴露数据库端口方便外部连接（默认已经暴露）
+  # db:
+  #   ports:
+  #     - "3306:3306"

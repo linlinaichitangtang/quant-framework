@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # MySQL数据库
+  db:
+    image: mysql:8.0
+    container_name: quant-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-quant123456}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-quant_trade}
+      MYSQL_USER: ${MYSQL_USER:-quant}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-quant123456}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - quant-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "$$MYSQL_USER", "-p$$MYSQL_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 后端API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: quant-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-quant}:${MYSQL_PASSWORD:-quant123456}@db:3306/${MYSQL_DATABASE:-quant_trade}
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      DEBUG: ${DEBUG:-false}
+      AK_SHARE_TOKEN: ${AK_SHARE_TOKEN:-}
+      TUSHARE_TOKEN: ${TUSHARE_TOKEN:-}
+      FMZ_API_KEY: ${FMZ_API_KEY:-}
+      FMZ_SECRET_KEY: ${FMZ_SECRET_KEY:-}
+      FMZ_CID: ${FMZ_CID:-0}
+      CORS_ORIGINS: ["http://localhost:80", "${CORS_ORIGIN:-}"]
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - quant-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # 前端仪表盘
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: quant-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - quant-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  mysql_data:
+
+networks:
+  quant-network:
+    driver: bridge
