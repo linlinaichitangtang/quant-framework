@@ -15,8 +15,10 @@
     "element-plus": "^2.5.6",
     "pinia": "^2.1.7",
     "three": "^0.183.2",
+    "vite-plugin-pwa": "^1.2.0",
     "vue": "^3.4.0",
-    "vue-router": "^4.2.5"
+    "vue-router": "^4.2.5",
+    "workbox-window": "^7.4.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.3",

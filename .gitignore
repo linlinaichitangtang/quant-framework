@@ -59,6 +59,8 @@ Thumbs.db
 node_modules/
 dist/
 *.pkl
-*.png
 venv/
 storage/
+
+# Allow PWA icons
+!frontend/public/*.png

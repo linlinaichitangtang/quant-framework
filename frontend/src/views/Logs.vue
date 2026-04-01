@@ -272,4 +272,15 @@ function formatTime(timeStr) {
   gap: 8px;
   color: #606266;
 }
+
+@media screen and (max-width: 767px) {
+  .logs-page {
+    .logs-container {
+      max-height: calc(100vh - 380px);
+    }
+    .auto-refresh {
+      font-size: 13px;
+    }
+  }
+}
 </style>

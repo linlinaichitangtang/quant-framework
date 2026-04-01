@@ -1,5 +1,6 @@
 # 开发环境覆盖配置
-# 此文件不加入版本控制，用于本地开发覆盖配置
+# 此文件用于本地开发，会自动覆盖 docker-compose.yml 中的配置
+# 注意：此文件不应加入版本控制（已在 .gitignore 中）
 
 version: '3.8'
 
@@ -10,8 +11,20 @@ services:
       - ./backend:/app
       - ./logs:/app/logs
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - DEBUG=true
 
-  # 开发环境暴露数据库端口方便外部连接（默认已经暴露）
-  # db:
-  #   ports:
-  #     - "3306:3306"
+  frontend:
+    # 开发环境使用 Vite 热更新
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+    command: npm run dev -- --host 0.0.0.0
+
+  db:
+    # 开发环境暴露数据库端口方便外部连接
+    ports:
+      - "3306:3306"

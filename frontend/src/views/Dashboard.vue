@@ -2,13 +2,13 @@
   <div class="dashboard">
     <!-- 统计卡片 -->
     <el-row :gutter="16">
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <div class="stat-card">
         <div class="stat-title">总持仓市值</div>
         <div class="stat-value">{{ formatCurrency(overview?.total_market_value) }}</div>
         </div>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <div class="stat-card">
         <div class="stat-title">未实现盈亏</div>
         <div :class="['stat-value', overview?.total_unrealized_profit > 0 ? 'profit-positive' : 'profit-negative']">
@@ -16,13 +16,13 @@
         </div>
         </div>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <div class="stat-card">
         <div class="stat-title">当前持仓数</div>
         <div class="stat-value">{{ overview?.total_positions }}</div>
         </div>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="12" :sm="12" :md="6">
         <div class="stat-card">
         <div class="stat-title">待执行信号</div>
         <div class="stat-value">{{ overview?.pending_signals_count }}</div>
@@ -105,11 +105,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useDashboardStore } from '@/stores/dashboard'
-import { getPositions, getSignals, executeSignal as apiExecuteSignal } from '@/api'
+import { getPositions, getSignals, getTrades, executeSignal as apiExecuteSignal } from '@/api'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
+import dayjs from 'dayjs'
+import { useResponsive } from '@/composables/useResponsive'
+
+const { isMobile, colSpan } = useResponsive()
 
 const store = useDashboardStore()
 const loading = ref(true)
@@ -127,6 +131,7 @@ onMounted(async () => {
     fetchTodaySignals()
   ])
   loading.value = false
+  await fetchChartData()
   initChart()
 })
 
@@ -196,7 +201,11 @@ function initChart() {
 
   const option = {
     tooltip: {
-      trigger: 'axis'
+      trigger: 'axis',
+      formatter: (params) => {
+        const p = params[0]
+        return `${p.name}<br/>${p.seriesName}: ${p.value.toFixed(2)}%`
+      }
     },
     legend: {
       data: ['累计收益']
@@ -210,7 +219,7 @@ function initChart() {
     xAxis: {
       type: 'category',
       boundaryGap: false,
-      data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+      data: chartDates.value.length > 0 ? chartDates.value : []
     },
     yAxis: {
       type: 'value',
@@ -222,7 +231,7 @@ function initChart() {
       name: '累计收益',
       type: 'line',
       smooth: true,
-      data: [0, 1.2, 2.5, 1.8, 3.2, 4.5, 5.8],
+      data: chartProfits.value.length > 0 ? chartProfits.value : [0],
       areaStyle: {
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
           { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
@@ -235,9 +244,61 @@ function initChart() {
   chart.setOption(option)
 }
 
-// 响应式
-window.addEventListener('resize', () => {
+// 从交易记录计算每日盈亏
+const chartDates = ref([])
+const chartProfits = ref([])
+
+async function fetchChartData() {
+  try {
+    const res = await getTrades({ page: 1, page_size: 200 })
+    const trades = res.data || []
+    if (trades.length === 0) {
+      chartDates.value = []
+      chartProfits.value = []
+      return
+    }
+
+    // 按日期汇总盈亏
+    const dailyPnl = {}
+    trades.forEach(trade => {
+      const date = dayjs(trade.created_at).format('MM-DD')
+      if (!dailyPnl[date]) {
+        dailyPnl[date] = 0
+      }
+      // 买入为负，卖出为正（简化计算）
+      if (trade.side === 'SELL') {
+        dailyPnl[date] += trade.commission ? -trade.commission : 0
+      } else {
+        dailyPnl[date] -= trade.commission || 0
+      }
+    })
+
+    const sortedDates = Object.keys(dailyPnl).sort()
+    let cumulative = 0
+    chartDates.value = sortedDates
+    chartProfits.value = sortedDates.map(d => {
+      cumulative += dailyPnl[d]
+      return parseFloat(cumulative.toFixed(2))
+    })
+  } catch (e) {
+    console.error('Failed to fetch chart data:', e)
+    chartDates.value = []
+    chartProfits.value = []
+  }
+}
+
+// 响应式 resize
+const handleResize = () => {
   chart?.resize()
+}
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  chart?.dispose()
 })
 </script>
 
@@ -251,5 +312,12 @@ h3 {
   font-size: 16px;
   font-weight: 600;
   color: #303133;
+}
+
+@media screen and (max-width: 767px) {
+  .dashboard h3 {
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
 }
 </style>

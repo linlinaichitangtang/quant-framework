@@ -8,15 +8,14 @@ import os
 sys.path.insert(0, os.path.abspath('../src'))
 
 import pandas as pd
-from quant_framework import (
+from src.strategies import (
     AStockEveningPicker,
     AStockExitRule,
-    RiskManager,
     EventDetector,
     OptionStrategySelector,
-    FMZClient,
-    TradingSignal,
 )
+from src.risk import RiskManager
+from src.api import FMZClient, TradingSignal
 
 
 def example_a_stock_selection():

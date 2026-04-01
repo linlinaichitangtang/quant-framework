@@ -8,3 +8,4 @@ __author__ = "麟算"
 from .strategies import *
 from .api import *
 from .risk import *
+from .data import *

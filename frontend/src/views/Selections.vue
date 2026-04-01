@@ -67,12 +67,52 @@
         <el-table-column prop="selection_date" label="选股日期" width="110" />
         <el-table-column label="操作" width="100">
           <template #default="{ row }">
-            <el-button type="primary" size="small" link @click="createSignal(row)">生成信号</el-button>
+            <el-button type="primary" size="small" link @click="openSignalDialog(row)">生成信号</el-button>
           </template>
         </el-table-column>
       </el-table>
 
       <el-empty v-if="!loading && list.length === 0" description="暂无选股结果" />
+
+      <!-- 生成信号对话框 -->
+      <el-dialog v-model="signalDialogVisible" title="生成交易信号" width="500px">
+        <el-form :model="signalForm" label-width="100px">
+          <el-form-item label="股票代码">
+            <el-input :value="signalForm.symbol" disabled />
+          </el-form-item>
+          <el-form-item label="股票名称">
+            <el-input :value="signalForm.name" disabled />
+          </el-form-item>
+          <el-form-item label="方向">
+            <el-select v-model="signalForm.side">
+              <el-option label="买入" value="BUY" />
+              <el-option label="卖出" value="SELL" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="目标价">
+            <el-input-number v-model="signalForm.target_price" :precision="2" :step="0.1" />
+          </el-form-item>
+          <el-form-item label="数量">
+            <el-input-number v-model="signalForm.quantity" :step="100" :min="100" />
+          </el-form-item>
+          <el-form-item label="止损价">
+            <el-input-number v-model="signalForm.stop_loss" :precision="2" :step="0.1" />
+          </el-form-item>
+          <el-form-item label="止盈价">
+            <el-input-number v-model="signalForm.take_profit" :precision="2" :step="0.1" />
+          </el-form-item>
+          <el-form-item label="策略">
+            <el-input v-model="signalForm.strategy_name" placeholder="如：A股尾盘策略" />
+          </el-form-item>
+          <el-form-item label="备注">
+            <el-input v-model="signalForm.reason" type="textarea" :rows="2" placeholder="信号理由" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="signalDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitSignal" :loading="submitting">确认生成</el-button>
+        </template>
+      </el-dialog>
 
       <div class="pagination-wrapper" v-if="total > pageSize">
         <el-pagination
@@ -91,7 +131,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getSelections } from '@/api'
+import { getSelections, createSignal as apiCreateSignal } from '@/api'
 import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
@@ -157,9 +197,63 @@ function resetFilters() {
   fetchData()
 }
 
-function createSignal(row) {
-  ElMessage.info(`已为 ${row.name}(${row.symbol}) 生成交易信号`)
-  // TODO: 打开对话框创建交易信号
+const signalDialogVisible = ref(false)
+const submitting = ref(false)
+const signalForm = ref({
+  symbol: '',
+  name: '',
+  market: '',
+  side: 'BUY',
+  target_price: 0,
+  quantity: 100,
+  stop_loss: 0,
+  take_profit: 0,
+  strategy_name: '',
+  strategy_id: '',
+  reason: ''
+})
+
+function openSignalDialog(row) {
+  signalForm.value = {
+    symbol: row.symbol,
+    name: row.name,
+    market: row.market,
+    side: 'BUY',
+    target_price: row.close || 0,
+    quantity: 100,
+    stop_loss: row.close ? parseFloat((row.close * 0.98).toFixed(2)) : 0,
+    take_profit: row.close ? parseFloat((row.close * 1.02).toFixed(2)) : 0,
+    strategy_name: 'A股尾盘策略',
+    strategy_id: 'a-stock-close-swipe',
+    reason: `选股评分: ${row.score?.toFixed(2) || 0}`
+  }
+  signalDialogVisible.value = true
+}
+
+async function submitSignal() {
+  submitting.value = true
+  try {
+    await apiCreateSignal({
+      symbol: signalForm.value.symbol,
+      market: signalForm.value.market,
+      side: signalForm.value.side,
+      target_price: signalForm.value.target_price,
+      quantity: signalForm.value.quantity,
+      stop_loss: signalForm.value.stop_loss,
+      take_profit: signalForm.value.take_profit,
+      strategy_name: signalForm.value.strategy_name,
+      strategy_id: signalForm.value.strategy_id,
+      reason: signalForm.value.reason,
+      signal_type: 'OPEN'
+    })
+    ElMessage.success(`已为 ${signalForm.value.name}(${signalForm.value.symbol}) 生成交易信号`)
+    signalDialogVisible.value = false
+  } catch (error) {
+    console.error('Failed to create signal:', error)
+    ElMessage.error('生成交易信号失败')
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
 
@@ -176,5 +270,11 @@ function createSignal(row) {
   margin-top: 20px;
   display: flex;
   justify-content: flex-end;
+}
+
+@media screen and (max-width: 767px) {
+  .selections-page .el-dialog {
+    width: 95% !important;
+  }
 }
 </style>

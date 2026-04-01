@@ -230,3 +230,22 @@ def sample_positions():
             'sector': '地产',
         }
     }
+
+
+@pytest.fixture
+def db_session():
+    """创建内存 SQLite 数据库会话，每个测试独立"""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.database import Base
+    from app import models  # noqa: 确保所有模型被注册
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(bind=engine)
+    SessionLocal = sessionmaker(bind=engine)
+    session = SessionLocal()
+
+    yield session
+
+    session.close()
+    engine.dispose()

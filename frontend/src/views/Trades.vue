@@ -238,4 +238,14 @@ function getStatusText(status) {
   display: flex;
   justify-content: flex-end;
 }
+
+@media screen and (max-width: 767px) {
+  .trades-page .stats-summary {
+    .el-row {
+      .el-col {
+        margin-bottom: 8px;
+      }
+    }
+  }
+}
 </style>
