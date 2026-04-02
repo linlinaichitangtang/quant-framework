@@ -108,6 +108,14 @@ export function getLogs(params) {
   })
 }
 
+// 清空系统日志
+export function clearLogs() {
+  return request({
+    url: '/api/v1/logs',
+    method: 'delete'
+  })
+}
+
 // 执行交易信号
 export function executeSignal(signalId, data) {
   return request({

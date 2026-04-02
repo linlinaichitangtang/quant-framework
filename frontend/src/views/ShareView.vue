@@ -366,7 +366,8 @@ import {
   getMyTemplates, saveTemplate as apiSaveTemplate, updateTemplate, deleteTemplate as apiDeleteTemplate,
   useTemplate as apiUseTemplate, getMarketTemplates, installTemplate as apiInstallTemplate,
   uploadTemplateCover,
-  getShareLinks, createShareLink, revokeShareLink, getAccessStats, getRecentAccess
+  getShareLinks, createShareLink, revokeShareLink, getAccessStats, getRecentAccess,
+  updateProjectPermission
 } from '@/api'
 
 const activeTab = ref('export')
@@ -441,7 +442,7 @@ async function handleExport() {
   
   exporting.value = true
   try {
-    await apiExportProject({
+    await exportProject({
       name: exportName.value,
       include: exportInclude.value
     })
@@ -455,25 +456,41 @@ async function handleExport() {
 }
 
 async function fetchExportHistory() {
-  // TODO: 调用API获取导出历史
-  exportHistory.value = [
-    { id: 1, name: 'project_backup_20260317.zip', size: '125MB', created_at: '2026-03-17T12:00:00Z' }
-  ]
+  try {
+    const data = await getExportHistory()
+    exportHistory.value = data.data || []
+  } catch (e) {
+    console.error('获取导出历史失败:', e)
+    exportHistory.value = []
+  }
 }
 
-function downloadExport(row) {
-  // TODO: 调用下载API
-  ElMessage.info('开始下载: ' + row.name)
+async function downloadExport(row) {
+  try {
+    const res = await downloadExportFile(row.id)
+    const blob = new Blob([res])
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = row.name || 'export.zip'
+    link.click()
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('开始下载: ' + row.name)
+  } catch (e) {
+    ElMessage.error('下载失败: ' + (e?.response?.data?.detail || e.message))
+  }
 }
 
 async function deleteExport(row) {
   try {
     await ElMessageBox.confirm('确定要删除这个导出文件吗？', '提示')
-    // TODO: 调用删除API
+    await deleteExportFile(row.id)
     exportHistory.value = exportHistory.value.filter(e => e.id !== row.id)
     ElMessage.success('已删除')
-  } catch {
-    // 取消
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error('删除失败: ' + (e?.response?.data?.detail || e.message))
+    }
   }
 }
 
@@ -604,17 +621,25 @@ async function installTemplate(tpl) {
 
 // 协作功能
 async function updatePermission() {
-  // TODO: 调用更新权限API
-  currentPermission.value = newPermission.value
-  ElMessage.success('权限已更新')
+  try {
+    await updateProjectPermission({ permission: newPermission.value })
+    currentPermission.value = newPermission.value
+    ElMessage.success('权限已更新')
+  } catch (e) {
+    ElMessage.error('更新权限失败: ' + (e?.response?.data?.detail || e.message))
+  }
 }
 
 async function generateShareLink() {
   try {
-    // TODO: 调用生成链接API
+    const res = await createShareLink({
+      permission: sharePermission.value,
+      expires_days: shareExpire.value
+    })
+    const linkData = res.data || res
     const newLink = {
-      id: Date.now(),
-      url: `https://example.com/share/${Math.random().toString(36).slice(2)}`,
+      id: linkData.id,
+      url: linkData.url || `https://example.com/share/${linkData.token}`,
       permission: sharePermission.value,
       expires_at: shareExpire.value > 0 ? new Date(Date.now() + shareExpire.value * 86400000).toISOString() : null,
       views: 0
@@ -622,7 +647,7 @@ async function generateShareLink() {
     shareLinks.value.push(newLink)
     ElMessage.success('分享链接已生成')
   } catch (e) {
-    ElMessage.error('生成失败: ' + e.message)
+    ElMessage.error('生成失败: ' + (e?.response?.data?.detail || e.message))
   }
 }
 
@@ -637,35 +662,54 @@ function copyLink(url) {
 async function revokeLink(row) {
   try {
     await ElMessageBox.confirm('确定要撤销这个分享链接吗？', '撤销链接')
-    // TODO: 调用撤销API
+    await revokeShareLink(row.id)
     shareLinks.value = shareLinks.value.filter(l => l.id !== row.id)
     ElMessage.success('链接已撤销')
-  } catch {
-    // 取消
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error('撤销失败: ' + (e?.response?.data?.detail || e.message))
+    }
   }
 }
 
 async function fetchShareLinks() {
-  // TODO: 调用API获取分享链接
-  shareLinks.value = []
+  try {
+    const data = await getShareLinks()
+    shareLinks.value = data.data || []
+  } catch (e) {
+    console.error('获取分享链接失败:', e)
+    shareLinks.value = []
+  }
 }
 
 async function fetchAccessStats() {
-  // TODO: 调用API获取访问统计
-  accessStats.value = {
-    total_views: 156,
-    today_views: 12,
-    unique_visitors: 45,
-    active_links: 3
+  try {
+    const data = await getAccessStats()
+    accessStats.value = data.data || {
+      total_views: 0,
+      today_views: 0,
+      unique_visitors: 0,
+      active_links: 0
+    }
+  } catch (e) {
+    console.error('获取访问统计失败:', e)
+    accessStats.value = {
+      total_views: 0,
+      today_views: 0,
+      unique_visitors: 0,
+      active_links: 0
+    }
   }
 }
 
 async function fetchRecentAccess() {
-  // TODO: 调用API获取最近访问
-  recentAccess.value = [
-    { visitor: '用户A', permission: 'read', accessed_at: '2026-03-30T10:30:00Z', ip: '192.168.1.100', action: '查看项目' },
-    { visitor: '用户B', permission: 'edit', accessed_at: '2026-03-30T09:15:00Z', ip: '192.168.1.101', action: '编辑模型' }
-  ]
+  try {
+    const data = await getRecentAccess()
+    recentAccess.value = data.data || []
+  } catch (e) {
+    console.error('获取最近访问失败:', e)
+    recentAccess.value = []
+  }
 }
 
 function initAccessChart() {

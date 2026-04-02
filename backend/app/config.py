@@ -16,7 +16,8 @@ class Settings(BaseSettings):
     secret_key: str = "openclaw_quant_secret_key_change_in_production_2024"  # 生产环境必须通过环境变量覆盖
     access_token_expire_minutes: int = 60 * 24  # 24 小时
     refresh_token_expire_days: int = 30
-    cors_origins: List[str] = ["*"]  # 生产环境应设为具体域名
+    cors_origins: List[str] = ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"]  # 生产环境应通过环境变量 CORS_ORIGINS 覆盖为具体域名
+    allowed_hosts: List[str] = ["*"]  # 生产环境应设为具体域名列表
 
     # ========== 数据库配置 ==========
     database_url: str = "sqlite:///./quant_trade.db"

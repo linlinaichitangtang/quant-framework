@@ -721,6 +721,9 @@ class TestPluginManager:
         plugin = self.manager.register_plugin(plugin_info)
         plugin_id = plugin["plugin_id"]
 
+        # 注册执行器
+        self.manager.register_executor(plugin_id, "run", lambda params: {"executed": True, "params": params})
+
         result = self.manager.execute_plugin(
             plugin_id=plugin_id,
             method="run",
@@ -729,6 +732,7 @@ class TestPluginManager:
         assert result["success"] is True
         assert result["plugin_id"] == plugin_id
         assert result["method"] == "run"
+        assert result["result"]["executed"] is True
 
         # 测试不存在的插件
         result_fail = self.manager.execute_plugin(
@@ -737,6 +741,14 @@ class TestPluginManager:
         )
         assert result_fail["success"] is False
         assert "error" in result_fail
+
+        # 测试没有注册执行器的方法
+        result_no_executor = self.manager.execute_plugin(
+            plugin_id=plugin_id,
+            method="nonexistent_method",
+        )
+        assert result_no_executor["success"] is False
+        assert "没有注册方法" in result_no_executor["error"]
 
 
 # ============================================================================

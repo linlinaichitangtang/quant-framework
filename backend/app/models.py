@@ -1229,3 +1229,56 @@ class PrivateMessage(Base):
 
     def __repr__(self):
         return f"<PrivateMessage {self.sender_id}->{self.receiver_id}>"
+
+
+# ==================== 项目分享与导出模型 ====================
+
+class ProjectExport(Base):
+    """项目导出记录表"""
+    __tablename__ = "project_exports"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False, comment="导出文件名称")
+    file_path = Column(String(500), comment="导出文件路径")
+    file_size = Column(Integer, default=0, comment="文件大小(bytes)")
+    status = Column(String(20), default="pending", comment="状态 pending/completed/failed")
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, comment="创建用户ID")
+    created_at = Column(DateTime, default=func.now(), index=True, comment="创建时间")
+
+    __table_args__ = {'comment': '项目导出记录表'}
+
+    def __repr__(self):
+        return f"<ProjectExport {self.name} ({self.status})>"
+
+
+class ShareLink(Base):
+    """分享链接表"""
+    __tablename__ = "share_links"
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String(100), unique=True, index=True, nullable=False, comment="分享令牌")
+    permission = Column(String(20), default="read", comment="权限 read/edit")
+    expires_at = Column(DateTime, nullable=True, comment="过期时间")
+    views = Column(Integer, default=0, comment="访问次数")
+    is_active = Column(Boolean, default=True, comment="是否有效")
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, comment="创建用户ID")
+    created_at = Column(DateTime, default=func.now(), index=True, comment="创建时间")
+
+    __table_args__ = {'comment': '分享链接表'}
+
+    def __repr__(self):
+        return f"<ShareLink {self.token[:12]}... ({self.permission})>"
+
+
+class AccessLog(Base):
+    """访问日志表"""
+    __tablename__ = "access_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    share_link_id = Column(Integer, ForeignKey("share_links.id"), nullable=True, comment="分享链接ID")
+    visitor_ip = Column(String(50), comment="访客IP")
+    visitor_user_agent = Column(String(500), comment="访客User-Agent")
+    action = Column(String(100), comment="操作类型")
+    created_at = Column(DateTime, default=func.now(), index=True, comment="访问时间")
+
+    __table_args__ = {'comment': '访问日志表'}
+
+    def __repr__(self):
+        return f"<AccessLog link={self.share_link_id} {self.action}>"

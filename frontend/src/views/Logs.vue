@@ -73,7 +73,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { getLogs } from '@/api'
+import { getLogs, clearLogs } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const loading = ref(false)
@@ -184,13 +184,16 @@ async function clearLogs() {
       type: 'warning'
     })
     clearing.value = true
-    // TODO: 调用清空日志API
-    setTimeout(() => {
+    try {
+      await clearLogs()
       list.value = []
       total.value = 0
-      clearing.value = false
       ElMessage.success('日志已清空')
-    }, 500)
+    } catch (e) {
+      ElMessage.error('清空日志失败: ' + (e?.response?.data?.detail || e.message))
+    } finally {
+      clearing.value = false
+    }
   } catch {
     // 用户取消
   }

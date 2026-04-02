@@ -3,6 +3,7 @@ import logging.config
 import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
+from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -30,6 +31,7 @@ from .ha_api import router as ha_router
 from .algo_api import router as algo_router
 from .multi_market_api import router as multi_market_router
 from .community_api import router as community_router
+from .project_api import router as project_router
 
 
 # ========== 结构化日志配置 ==========
@@ -198,7 +200,7 @@ app.add_middleware(
 if not settings.debug:
     app.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=["*"],  # 生产环境应设为具体域名列表
+        allowed_hosts=settings.allowed_hosts,
     )
 
 # 限流异常处理
@@ -231,6 +233,7 @@ app.include_router(ha_router)
 app.include_router(algo_router)
 app.include_router(multi_market_router)
 app.include_router(community_router)
+app.include_router(project_router, prefix="/api/v1/project", tags=["项目管理"])
 
 # ========== Prometheus 指标 ==========
 Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
@@ -268,7 +271,7 @@ async def health_check():
     # 数据库检查
     try:
         db = SessionLocal()
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         db.close()
         checks["database"] = "ok"
     except Exception as e:
@@ -285,6 +288,23 @@ async def health_check():
         checks["status"] = "degraded"
 
     return checks
+
+
+@app.delete("/api/v1/logs", summary="清空应用日志")
+async def clear_logs():
+    """清空应用日志"""
+    try:
+        db = SessionLocal()
+        try:
+            db.query(SystemLog).delete()
+            db.commit()
+            logger.info("应用日志已清空")
+            return {"code": 0, "message": "日志已清空"}
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"清空日志失败: {e}")
+        raise HTTPException(status_code=500, detail=f"清空日志失败: {str(e)}")
 
 
 if __name__ == "__main__":

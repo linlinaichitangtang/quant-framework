@@ -8,7 +8,8 @@
 import logging
 import json
 import uuid
-from typing import Optional, List, Dict, Any
+import time
+from typing import Optional, List, Dict, Any, Callable
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -51,6 +52,7 @@ class PluginManager:
 
         self._plugins: Dict[str, dict] = {}  # plugin_id -> plugin_info
         self._hooks: Dict[str, List[str]] = {h: [] for h in SUPPORTED_HOOKS}  # hook_name -> [plugin_ids]
+        self._plugin_executors: Dict[str, Dict[str, Callable]] = {}  # plugin_id -> {method_name: executor_func}
         self._initialized = True
         logger.info("插件管理器初始化完成")
 
@@ -268,14 +270,23 @@ class PluginManager:
         """
         执行插件方法
 
+        支持两种执行模式:
+        1. 钩子执行: 当 method 是支持的钩子名称时，执行该钩子上所有注册的插件
+        2. 直接方法执行: 当 method 是自定义方法名时，查找插件注册的执行器函数
+
         Args:
-            plugin_id: 插件标识
-            method: 方法名称
+            plugin_id: 插件标识（钩子模式下可为空字符串）
+            method: 方法名称或钩子名称
             params: 方法参数
 
         Returns:
             执行结果字典
         """
+        # 钩子模式: method 是一个钩子名称
+        if method in self._hooks:
+            return self.fire_hook(method, params or {})
+
+        # 直接方法执行模式
         plugin = self.get_plugin(plugin_id)
         if not plugin:
             return {"success": False, "error": f"插件不存在: {plugin_id}"}
@@ -285,21 +296,168 @@ class PluginManager:
 
         logger.info(f"执行插件方法: {plugin_id}.{method}")
 
-        # 插件方法执行的实际逻辑由具体插件实现
-        # 这里提供统一的调用接口和日志记录
+        # 查找注册的执行器
+        executors = self._plugin_executors.get(plugin_id, {})
+        executor = executors.get(method)
+
+        if executor is None:
+            logger.warning(f"插件 {plugin_id} 没有注册方法 {method} 的执行器")
+            return {
+                "success": False,
+                "error": f"插件 {plugin_id} 没有注册方法 {method} 的执行器",
+                "plugin_id": plugin_id,
+                "method": method,
+            }
+
+        # 在沙箱化环境中执行
+        start_time = time.time()
         try:
-            # TODO: 根据插件类型调用对应的执行器
-            result = {
+            result = executor(params or {})
+            elapsed_ms = (time.time() - start_time) * 1000
+
+            logger.info(
+                f"插件方法执行成功: {plugin_id}.{method} "
+                f"(耗时 {elapsed_ms:.1f}ms)"
+            )
+
+            return {
                 "success": True,
                 "plugin_id": plugin_id,
                 "method": method,
                 "params": params or {},
+                "result": result,
+                "elapsed_ms": round(elapsed_ms, 2),
                 "message": f"插件方法 {method} 执行成功",
             }
-            return result
         except Exception as e:
-            logger.error(f"插件方法执行失败: {plugin_id}.{method}: {e}")
-            return {"success": False, "error": str(e)}
+            elapsed_ms = (time.time() - start_time) * 1000
+            logger.error(
+                f"插件方法执行失败: {plugin_id}.{method}: {e} "
+                f"(耗时 {elapsed_ms:.1f}ms)"
+            )
+            return {
+                "success": False,
+                "plugin_id": plugin_id,
+                "method": method,
+                "error": str(e),
+                "elapsed_ms": round(elapsed_ms, 2),
+            }
+
+    def register_executor(
+        self,
+        plugin_id: str,
+        method_name: str,
+        executor_func: Callable,
+    ) -> None:
+        """
+        注册插件执行器函数
+
+        Args:
+            plugin_id: 插件标识
+            method_name: 方法名称
+            executor_func: 执行器函数，接收 params dict，返回结果
+        """
+        if plugin_id not in self._plugin_executors:
+            self._plugin_executors[plugin_id] = {}
+        self._plugin_executors[plugin_id][method_name] = executor_func
+        logger.info(f"注册插件执行器: {plugin_id}.{method_name}")
+
+    def fire_hook(self, hook_name: str, context: Optional[dict] = None) -> dict:
+        """
+        触发钩子，按顺序执行该钩子上所有注册的插件
+
+        一个插件失败不会影响其他插件的执行。
+
+        Args:
+            hook_name: 钩子名称
+            context: 上下文数据，会传递给每个插件的执行器
+
+        Returns:
+            执行结果汇总字典
+        """
+        if hook_name not in self._hooks:
+            return {
+                "success": False,
+                "error": f"不支持的钩子: {hook_name}",
+                "hook": hook_name,
+                "results": [],
+            }
+
+        plugin_ids = self._hooks[hook_name]
+        if not plugin_ids:
+            return {
+                "success": True,
+                "hook": hook_name,
+                "message": "该钩子上没有注册插件",
+                "results": [],
+            }
+
+        logger.info(f"触发钩子: {hook_name} ({len(plugin_ids)} 个插件)")
+
+        results = []
+        context = context or {}
+        all_success = True
+
+        for pid in plugin_ids:
+            plugin = self.get_plugin(pid)
+            if not plugin or plugin.get("status") != "active":
+                results.append({
+                    "plugin_id": pid,
+                    "success": False,
+                    "error": "插件不存在或未激活",
+                })
+                all_success = False
+                continue
+
+            executors = self._plugin_executors.get(pid, {})
+            executor = executors.get(hook_name)
+
+            if executor is None:
+                # 没有注册钩子执行器，跳过但不算失败
+                results.append({
+                    "plugin_id": pid,
+                    "success": True,
+                    "skipped": True,
+                    "message": "没有注册钩子执行器",
+                })
+                continue
+
+            start_time = time.time()
+            try:
+                result = executor(context)
+                elapsed_ms = (time.time() - start_time) * 1000
+                results.append({
+                    "plugin_id": pid,
+                    "success": True,
+                    "result": result,
+                    "elapsed_ms": round(elapsed_ms, 2),
+                })
+                logger.info(
+                    f"钩子插件执行成功: {hook_name} -> {pid} "
+                    f"(耗时 {elapsed_ms:.1f}ms)"
+                )
+            except Exception as e:
+                elapsed_ms = (time.time() - start_time) * 1000
+                all_success = False
+                results.append({
+                    "plugin_id": pid,
+                    "success": False,
+                    "error": str(e),
+                    "elapsed_ms": round(elapsed_ms, 2),
+                })
+                logger.error(
+                    f"钩子插件执行失败: {hook_name} -> {pid}: {e} "
+                    f"(耗时 {elapsed_ms:.1f}ms)"
+                )
+
+        return {
+            "success": all_success,
+            "hook": hook_name,
+            "total": len(plugin_ids),
+            "succeeded": sum(1 for r in results if r.get("success")),
+            "failed": sum(1 for r in results if not r.get("success")),
+            "results": results,
+        }
 
     def validate_plugin_config(self, plugin_id: str, config: dict) -> dict:
         """
