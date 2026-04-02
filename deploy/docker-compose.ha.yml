@@ -1,0 +1,228 @@
+version: '3.8'
+
+# V1.8 高可用 Docker Compose 配置
+# MySQL 主从复制 + Redis Sentinel + 多实例后端 + Nginx 负载均衡
+
+services:
+  # ==================== MySQL 主库 ====================
+  mysql-master:
+    image: mysql:8.0
+    container_name: openclaw-mysql-master
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-openclaw_root_2024}
+      MYSQL_DATABASE: openclaw
+      MYSQL_USER: openclaw
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-openclaw_pass_2024}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-master-data:/var/lib/mysql
+      - ./scripts/master.cnf:/etc/mysql/conf.d/master.cnf
+      - ./scripts/init-replication.sql:/docker-entrypoint-initdb.d/init.sql
+    command: --server-id=1 --log-bin=mysql-bin --binlog-format=ROW --gtid-mode=ON --enforce-gtid-consistency=ON
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-openclaw_root_2024}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ha-network
+
+  # ==================== MySQL 从库 1 ====================
+  mysql-replica-1:
+    image: mysql:8.0
+    container_name: openclaw-mysql-replica-1
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-openclaw_root_2024}
+      MYSQL_DATABASE: openclaw
+      MYSQL_USER: openclaw
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-openclaw_pass_2024}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-replica1-data:/var/lib/mysql
+      - ./scripts/replica.cnf:/etc/mysql/conf.d/replica.cnf
+    command: --server-id=2 --relay-log=relay-bin --read-only=1 --gtid-mode=ON --enforce-gtid-consistency=ON
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-openclaw_root_2024}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ha-network
+
+  # ==================== MySQL 从库 2 ====================
+  mysql-replica-2:
+    image: mysql:8.0
+    container_name: openclaw-mysql-replica-2
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-openclaw_root_2024}
+      MYSQL_DATABASE: openclaw
+      MYSQL_USER: openclaw
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-openclaw_pass_2024}
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql-replica2-data:/var/lib/mysql
+      - ./scripts/replica.cnf:/etc/mysql/conf.d/replica.cnf
+    command: --server-id=3 --relay-log=relay-bin --read-only=1 --gtid-mode=ON --enforce-gtid-consistency=ON
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-openclaw_root_2024}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ha-network
+
+  # ==================== Redis Sentinel 节点 1 ====================
+  redis-sentinel-1:
+    image: redis:7-alpine
+    container_name: openclaw-redis-sentinel-1
+    command: redis-sentinel /etc/redis/sentinel.conf
+    volumes:
+      - ./scripts/sentinel.conf:/etc/redis/sentinel.conf
+    ports:
+      - "26379:26379"
+    depends_on:
+      - redis-master
+    networks:
+      - ha-network
+
+  # ==================== Redis Sentinel 节点 2 ====================
+  redis-sentinel-2:
+    image: redis:7-alpine
+    container_name: openclaw-redis-sentinel-2
+    command: redis-sentinel /etc/redis/sentinel.conf
+    volumes:
+      - ./scripts/sentinel.conf:/etc/redis/sentinel.conf
+    ports:
+      - "26380:26379"
+    depends_on:
+      - redis-master
+    networks:
+      - ha-network
+
+  # ==================== Redis Sentinel 节点 3 ====================
+  redis-sentinel-3:
+    image: redis:7-alpine
+    container_name: openclaw-redis-sentinel-3
+    command: redis-sentinel /etc/redis/sentinel.conf
+    volumes:
+      - ./scripts/sentinel.conf:/etc/redis/sentinel.conf
+    ports:
+      - "26381:26379"
+    depends_on:
+      - redis-master
+    networks:
+      - ha-network
+
+  # ==================== Redis 主节点 ====================
+  redis-master:
+    image: redis:7-alpine
+    container_name: openclaw-redis-master
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-openclaw_redis_2024}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-master-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-openclaw_redis_2024}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ha-network
+
+  # ==================== 后端 Worker 1 ====================
+  backend-worker-1:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: openclaw-backend-1
+    environment:
+      DATABASE_URL: mysql+pymysql://openclaw:${MYSQL_PASSWORD:-openclaw_pass_2024}@mysql-master:3306/openclaw
+      REDIS_URL: redis://:${REDIS_PASSWORD:-openclaw_redis_2024}@redis-master:6379/0
+      WORKER_ID: worker-1
+      WORKERS: 1
+    ports:
+      - "8001:8000"
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ha-network
+
+  # ==================== 后端 Worker 2 ====================
+  backend-worker-2:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: openclaw-backend-2
+    environment:
+      DATABASE_URL: mysql+pymysql://openclaw:${MYSQL_PASSWORD:-openclaw_pass_2024}@mysql-master:3306/openclaw
+      REDIS_URL: redis://:${REDIS_PASSWORD:-openclaw_redis_2024}@redis-master:6379/0
+      WORKER_ID: worker-2
+      WORKERS: 1
+    ports:
+      - "8002:8000"
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - ha-network
+
+  # ==================== Nginx 负载均衡 ====================
+  nginx-lb:
+    image: nginx:alpine
+    container_name: openclaw-nginx-lb
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./scripts/nginx.conf:/etc/nginx/nginx.conf
+      - ./scripts/nginx-lb.conf:/etc/nginx/conf.d/lb.conf
+    depends_on:
+      - backend-worker-1
+      - backend-worker-2
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - ha-network
+
+volumes:
+  mysql-master-data:
+  mysql-replica1-data:
+  mysql-replica2-data:
+  redis-master-data:
+
+networks:
+  ha-network:
+    driver: bridge

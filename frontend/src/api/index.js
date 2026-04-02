@@ -521,3 +521,202 @@ export function checkRisk(data) {
     data
   })
 }
+
+// ========== 多租户管理 ==========
+export const getTenants = (params) => request.get('/tenant', { params })
+export const getTenant = (tenantId) => request.get(`/tenant/${tenantId}`)
+export const createTenant = (data) => request.post('/tenant', data)
+export const updateTenant = (tenantId, data) => request.put(`/tenant/${tenantId}`, data)
+export const deleteTenant = (tenantId) => request.delete(`/tenant/${tenantId}`)
+export const getTenantUsage = (tenantId, params) => request.get(`/tenant/${tenantId}/usage`, { params })
+export const updateWhitelabel = (tenantId, data) => request.put(`/tenant/${tenantId}/whitelabel`, data)
+export const subscribeTenant = (tenantId, data) => request.post(`/tenant/${tenantId}/subscribe`, data)
+
+// ========== 插件市场 ==========
+export const getPlugins = (params) => request.get('/plugins', { params })
+export const getPlugin = (pluginId) => request.get(`/plugins/${pluginId}`)
+export const publishPlugin = (data) => request.post('/plugins', data)
+export const updatePlugin = (pluginId, data) => request.put(`/plugins/${pluginId}`, data)
+export const deletePlugin = (pluginId) => request.delete(`/plugins/${pluginId}`)
+export const installPlugin = (pluginId, data) => request.post(`/plugins/${pluginId}/install`, data)
+export const uninstallPlugin = (pluginId) => request.delete(`/plugins/${pluginId}/install`)
+export const executePlugin = (pluginId, data) => request.post(`/plugins/${pluginId}/execute`, data)
+export const ratePlugin = (pluginId, data) => request.post(`/plugins/${pluginId}/rate`, data)
+
+// ========== 计费管理 ==========
+export const getBillingPlans = () => request.get('/billing/plans')
+export const getCurrentSubscription = () => request.get('/billing/current')
+export const subscribePlan = (data) => request.post('/billing/subscribe', data)
+export const cancelSubscription = () => request.post('/billing/cancel')
+export const getBillingUsage = (params) => request.get('/billing/usage', { params })
+export const getInvoices = (params) => request.get('/billing/invoices', { params })
+export const getInvoice = (invoiceId) => request.get(`/billing/invoices/${invoiceId}`)
+
+// ========== 开放 API ==========
+export const getOpenAPIKeys = () => request.get('/openapi/keys')
+export const createOpenAPIKey = (data) => request.post('/openapi/keys', data)
+export const revokeOpenAPIKey = (keyId) => request.delete(`/openapi/keys/${keyId}`)
+export const rotateOpenAPIKey = (keyId) => request.post(`/openapi/keys/${keyId}/rotate`)
+
+// ========== AI 智能分析 ==========
+
+// AI 对话
+export function aiChat(data) {
+  return request({
+    url: '/api/v1/ai/chat',
+    method: 'post',
+    data
+  })
+}
+
+// 获取 AI 会话列表
+export function getAIChatSessions(params) {
+  return request({
+    url: '/api/v1/ai/sessions',
+    method: 'get',
+    params
+  })
+}
+
+// 获取 AI 会话详情
+export function getAIChatSession(sessionId) {
+  return request({
+    url: `/api/v1/ai/sessions/${sessionId}`,
+    method: 'get'
+  })
+}
+
+// 删除 AI 会话
+export function deleteAIChatSession(sessionId) {
+  return request({
+    url: `/api/v1/ai/sessions/${sessionId}`,
+    method: 'delete'
+  })
+}
+
+// 市场情绪分析
+export function analyzeSentiment(data) {
+  return request({
+    url: '/api/v1/ai/sentiment',
+    method: 'post',
+    data
+  })
+}
+
+// 获取情绪历史
+export function getSentimentHistory(params) {
+  return request({
+    url: '/api/v1/ai/sentiment/history',
+    method: 'get',
+    params
+  })
+}
+
+// 异常检测
+export function detectAnomalies(data) {
+  return request({
+    url: '/api/v1/ai/anomaly/detect',
+    method: 'post',
+    data
+  })
+}
+
+// 获取异常记录
+export function getAnomalyRecords(params) {
+  return request({
+    url: '/api/v1/ai/anomaly/records',
+    method: 'get',
+    params
+  })
+}
+
+// 策略归因分析
+export function analyzeAttribution(data) {
+  return request({
+    url: '/api/v1/ai/attribution',
+    method: 'post',
+    data
+  })
+}
+
+// 自然语言查询
+export function naturalLanguageQuery(data) {
+  return request({
+    url: '/api/v1/ai/query',
+    method: 'post',
+    data
+  })
+}
+
+// 获取策略建议
+export function getStrategyAdvice(data) {
+  return request({
+    url: '/api/v1/ai/advice',
+    method: 'post',
+    data
+  })
+}
+
+// ========== 算法交易 ==========
+export const createTWAPOrder = (data) => request.post('/algo/orders/twap', data)
+export const createVWAPOrder = (data) => request.post('/algo/orders/vwap', data)
+export const createIcebergOrder = (data) => request.post('/algo/orders/iceberg', data)
+export const createSmartOrder = (data) => request.post('/algo/orders/smart', data)
+export const getAlgoOrders = (params) => request.get('/algo/orders', { params })
+export const getAlgoOrder = (orderId) => request.get(`/algo/orders/${orderId}`)
+export const getAlgoOrderStatus = (orderId) => request.get(`/algo/orders/${orderId}/status`)
+export const cancelAlgoOrder = (orderId) => request.post(`/algo/orders/${orderId}/cancel`)
+export const getExecutionQuality = (orderId) => request.get(`/algo/orders/${orderId}/quality`)
+export const getExecutionHistory = (params) => request.get('/algo/executions/history', { params })
+
+// ========== 高可用与灾备 ==========
+export const getClusterStatus = () => request.get('/ha/cluster/status')
+export const getDBReplication = () => request.get('/ha/database/replication')
+export const triggerFailover = () => request.post('/ha/database/failover')
+export const createBackup = (data) => request.post('/ha/database/backup', data)
+export const getBackups = () => request.get('/ha/database/backups')
+export const restoreBackup = (backupId) => request.post(`/ha/database/restore/${backupId}`)
+export const deleteBackup = (backupId) => request.delete(`/ha/database/backup/${backupId}`)
+export const getSystemHealth = () => request.get('/ha/system/health')
+export const getPerformanceMetrics = (params) => request.get('/ha/system/metrics', { params })
+export const getAlertRules = () => request.get('/ha/alerts/rules')
+export const getActiveAlerts = () => request.get('/ha/alerts/active')
+export const acknowledgeAlert = (alertId) => request.post(`/ha/alerts/${alertId}/acknowledge`)
+
+// ========== 多市场扩展 ==========
+export const getFuturesContracts = (params) => request.get('/multi-market/futures/contracts', { params })
+export const getFuturesQuote = (symbol) => request.get(`/multi-market/futures/quote/${symbol}`)
+export const calculateFuturesMargin = (data) => request.post('/multi-market/futures/margin', data)
+export const getCryptoMarkets = () => request.get('/multi-market/crypto/markets')
+export const getCryptoQuote = (symbol) => request.get(`/multi-market/crypto/quote/${symbol}`)
+export const getCryptoKlines = (symbol, params) => request.get(`/multi-market/crypto/klines/${symbol}`, { params })
+export const getEtfList = (params) => request.get('/multi-market/etf/list', { params })
+export const getEtfDetail = (symbol, params) => request.get(`/multi-market/etf/detail/${symbol}`, { params })
+export const getMarketHours = (market) => request.get(`/multi-market/market-hours/${market}`)
+export const getMarketStatus = () => request.get('/multi-market/market-status')
+export const getArbitrageOpportunities = (params) => request.get('/multi-market/arbitrage/opportunities', { params })
+export const calculateArbitrage = (data) => request.post('/multi-market/arbitrage/calculate', data)
+export const getCrossMarketCorrelation = (params) => request.get('/multi-market/correlation', { params })
+export const getGlobalOverview = () => request.get('/multi-market/global-overview')
+
+// ========== 社区与协作 ==========
+export const getUserProfile = (userId) => request.get(`/community/profile/${userId}`)
+export const getMyProfile = () => request.get('/community/profile/me')
+export const updateUserProfile = (data) => request.put('/community/profile', data)
+export const followUser = (userId) => request.post(`/community/follow/${userId}`)
+export const unfollowUser = (userId) => request.delete(`/community/follow/${userId}`)
+export const getFollowers = (userId, params) => request.get(`/community/followers/${userId}`, { params })
+export const getFollowing = (userId, params) => request.get(`/community/following/${userId}`, { params })
+export const createPost = (data) => request.post('/community/posts', data)
+export const getPosts = (params) => request.get('/community/posts', { params })
+export const getPost = (postId) => request.get(`/community/posts/${postId}`)
+export const likePost = (postId) => request.post(`/community/posts/${postId}/like`)
+export const createComment = (postId, data) => request.post(`/community/posts/${postId}/comments`, data)
+export const getComments = (postId, params) => request.get(`/community/posts/${postId}/comments`, { params })
+export const shareTrade = (data) => request.post('/community/trades/share', data)
+export const getSharedTrades = (params) => request.get('/community/trades/shared', { params })
+export const getLeaderboard = (params) => request.get('/community/leaderboard', { params })
+export const sendMessage = (data) => request.post('/community/messages', data)
+export const getMessages = (userId, params) => request.get(`/community/messages/${userId}`, { params })
+export const getConversations = () => request.get('/community/conversations')
+export const searchUsers = (params) => request.get('/community/search/users', { params })

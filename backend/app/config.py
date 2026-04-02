@@ -54,6 +54,32 @@ class Settings(BaseSettings):
     smtp_password: Optional[str] = None
     smtp_from: Optional[str] = None
 
+    # ========== AI/LLM 配置 ==========
+    llm_provider: str = "openai"  # openai / deepseek / ollama
+    llm_api_key: str = ""
+    llm_base_url: str = "https://api.openai.com/v1"  # OpenAI 兼容 API 地址
+    llm_model: str = "gpt-4o-mini"  # 模型名称
+    llm_max_tokens: int = 2000
+    llm_temperature: float = 0.7
+
+    # ========== 多租户配置 ==========
+    multi_tenant_enabled: bool = False  # 是否启用多租户模式
+    default_tenant_id: str = "default"  # 默认租户ID
+    tenant_header: str = "X-Tenant-ID"  # 租户识别请求头
+
+    # ========== 计费配置 ==========
+    billing_enabled: bool = False
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    trial_days: int = 14
+
+    # ========== 多市场配置 ==========
+    crypto_exchange_api: str = ""  # 加密货币交易所 API
+    crypto_api_key: str = ""
+    crypto_api_secret: str = ""
+    futures_data_source: str = "simulation"  # simulation/live
+    global_timezone: str = "Asia/Shanghai"
+
     class Config:
         env_file = ".env"
         case_sensitive = False

@@ -1,0 +1,31 @@
+{
+  "name": "@openclaw/sdk",
+  "version": "2.0.0",
+  "description": "OpenClaw 量化交易平台 JavaScript SDK",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint src/"
+  },
+  "keywords": [
+    "openclaw",
+    "quantitative",
+    "trading",
+    "sdk",
+    "api"
+  ],
+  "author": "OpenClaw Team <dev@openclaw.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openclaw/openclaw-sdk-js.git"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "eslint": "^8.0.0",
+    "jest": "^29.0.0"
+  }
+}

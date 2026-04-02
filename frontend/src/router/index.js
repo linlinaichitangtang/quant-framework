@@ -55,6 +55,54 @@ const routes = [
     path: '/risk',
     name: 'Risk',
     component: () => import('@/views/RiskView.vue')
+  },
+  {
+    path: '/tenant',
+    name: 'TenantManage',
+    component: () => import('@/views/TenantManageView.vue'),
+    meta: { title: '租户管理' }
+  },
+  {
+    path: '/plugins',
+    name: 'PluginMarket',
+    component: () => import('@/views/PluginMarketView.vue'),
+    meta: { title: '插件市场' }
+  },
+  {
+    path: '/billing',
+    name: 'Billing',
+    component: () => import('@/views/BillingView.vue'),
+    meta: { title: '计费管理' }
+  },
+  {
+    path: '/ai',
+    name: 'AIAssistant',
+    component: () => import('@/views/AIAssistantView.vue'),
+    meta: { title: 'AI 智能分析' }
+  },
+  {
+    path: '/algo-trading',
+    name: 'AlgoTrading',
+    component: () => import('@/views/AlgoTradingView.vue'),
+    meta: { title: '算法交易' }
+  },
+  {
+    path: '/ha-monitor',
+    name: 'HAMonitor',
+    component: () => import('@/views/HAMonitorView.vue'),
+    meta: { title: '高可用监控' }
+  },
+  {
+    path: '/multi-market',
+    name: 'MultiMarket',
+    component: () => import('@/views/MultiMarketView.vue'),
+    meta: { title: '多市场' }
+  },
+  {
+    path: '/community',
+    name: 'Community',
+    component: () => import('@/views/CommunityView.vue'),
+    meta: { title: '社区' }
   }
 ]
 

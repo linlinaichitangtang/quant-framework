@@ -50,6 +50,30 @@
             <el-icon><Warning /></el-icon>
             <span>风控管理</span>
           </el-menu-item>
+          <el-menu-item index="/ai">
+            <el-icon><Monitor /></el-icon>
+            <span>AI 智能分析</span>
+          </el-menu-item>
+          <el-menu-item index="/tenant">
+            <el-icon><OfficeBuilding /></el-icon>
+            <span>租户管理</span>
+          </el-menu-item>
+          <el-menu-item index="/plugins">
+            <el-icon><Grid /></el-icon>
+            <span>插件市场</span>
+          </el-menu-item>
+          <el-menu-item index="/billing">
+            <el-icon><Wallet /></el-icon>
+            <span>计费管理</span>
+          </el-menu-item>
+          <el-menu-item index="/algo-trading">
+            <el-icon><Operation /></el-icon>
+            <span>算法交易</span>
+          </el-menu-item>
+          <el-menu-item index="/ha-monitor">
+            <el-icon><Monitor /></el-icon>
+            <span>高可用监控</span>
+          </el-menu-item>
         </el-menu>
       </el-aside>
 
@@ -111,6 +135,30 @@
               <el-icon><Warning /></el-icon>
               <span>风控管理</span>
             </el-menu-item>
+            <el-menu-item index="/ai">
+              <el-icon><Monitor /></el-icon>
+              <span>AI 智能分析</span>
+            </el-menu-item>
+            <el-menu-item index="/tenant">
+              <el-icon><OfficeBuilding /></el-icon>
+              <span>租户管理</span>
+            </el-menu-item>
+            <el-menu-item index="/plugins">
+              <el-icon><Grid /></el-icon>
+              <span>插件市场</span>
+            </el-menu-item>
+            <el-menu-item index="/billing">
+              <el-icon><Wallet /></el-icon>
+              <span>计费管理</span>
+            </el-menu-item>
+            <el-menu-item index="/algo-trading">
+              <el-icon><Operation /></el-icon>
+              <span>算法交易</span>
+            </el-menu-item>
+            <el-menu-item index="/ha-monitor">
+              <el-icon><Monitor /></el-icon>
+              <span>高可用监控</span>
+            </el-menu-item>
           </el-menu>
         </div>
       </el-drawer>
@@ -150,7 +198,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { DataLine, Grid, List, Document, Bell, VideoCamera, Share, TrendCharts, Coin, Warning, Menu } from '@element-plus/icons-vue'
+import { DataLine, Grid, List, Document, Bell, VideoCamera, Share, TrendCharts, Coin, Warning, Menu, Monitor, OfficeBuilding, Wallet, Operation } from '@element-plus/icons-vue'
 import { useDashboardStore } from '@/stores/dashboard'
 import { useResponsive } from '@/composables/useResponsive'
 import { useSwipe } from '@/composables/useSwipe'
@@ -194,7 +242,15 @@ const pageTitleMap = {
   '/share': '项目分享',
   '/backtest': '回测可视化',
   '/options': '期权分析',
-  '/risk': '风控管理'
+  '/risk': '风控管理',
+  '/ai': 'AI 智能分析',
+  '/tenant': '租户管理',
+  '/plugins': '插件市场',
+  '/billing': '计费管理',
+  '/algo-trading': '算法交易',
+  '/ha-monitor': '高可用监控',
+  '/multi-market': '多市场',
+  '/community': '社区'
 }
 
 const pageTitle = computed(() => pageTitleMap[route.path] || '量化交易监控')
