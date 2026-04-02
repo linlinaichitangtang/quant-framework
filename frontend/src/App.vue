@@ -66,12 +66,20 @@
             <el-icon><Wallet /></el-icon>
             <span>计费管理</span>
           </el-menu-item>
+          <el-menu-item index="/community">
+            <el-icon><ChatDotRound /></el-icon>
+            <span>社区</span>
+          </el-menu-item>
+          <el-menu-item index="/multi-market">
+            <el-icon><TrendCharts /></el-icon>
+            <span>多市场</span>
+          </el-menu-item>
           <el-menu-item index="/algo-trading">
             <el-icon><Operation /></el-icon>
             <span>算法交易</span>
           </el-menu-item>
           <el-menu-item index="/ha-monitor">
-            <el-icon><Monitor /></el-icon>
+            <el-icon><DataLine /></el-icon>
             <span>高可用监控</span>
           </el-menu-item>
         </el-menu>
@@ -151,12 +159,20 @@
               <el-icon><Wallet /></el-icon>
               <span>计费管理</span>
             </el-menu-item>
+            <el-menu-item index="/community">
+              <el-icon><ChatDotRound /></el-icon>
+              <span>社区</span>
+            </el-menu-item>
+            <el-menu-item index="/multi-market">
+              <el-icon><TrendCharts /></el-icon>
+              <span>多市场</span>
+            </el-menu-item>
             <el-menu-item index="/algo-trading">
               <el-icon><Operation /></el-icon>
               <span>算法交易</span>
             </el-menu-item>
             <el-menu-item index="/ha-monitor">
-              <el-icon><Monitor /></el-icon>
+              <el-icon><DataLine /></el-icon>
               <span>高可用监控</span>
             </el-menu-item>
           </el-menu>
@@ -198,7 +214,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { DataLine, Grid, List, Document, Bell, VideoCamera, Share, TrendCharts, Coin, Warning, Menu, Monitor, OfficeBuilding, Wallet, Operation } from '@element-plus/icons-vue'
+import { DataLine, Grid, List, Document, Bell, VideoCamera, Share, TrendCharts, Coin, Warning, Menu, Monitor, OfficeBuilding, Wallet, Operation, ChatDotRound } from '@element-plus/icons-vue'
 import { useDashboardStore } from '@/stores/dashboard'
 import { useResponsive } from '@/composables/useResponsive'
 import { useSwipe } from '@/composables/useSwipe'

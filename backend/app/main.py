@@ -109,8 +109,7 @@ async def lifespan(app: FastAPI):
     # 初始化默认订阅计划
     try:
         from .billing_service import BillingService
-        billing = BillingService(db)
-        billing.init_default_plans(db)
+        BillingService.init_default_plans(db)
         logger.info("默认订阅计划已初始化")
     except Exception as e:
         logger.warning(f"订阅计划初始化失败: {e}")

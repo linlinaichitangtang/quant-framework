@@ -5,7 +5,7 @@ from typing import List, Optional
 class Settings(BaseSettings):
     # ========== 应用配置 ==========
     app_name: str = "OpenClaw"
-    app_version: str = "1.0.0"
+    app_version: str = "2.0.0"
     debug: bool = True
     api_host: str = "0.0.0.0"
     api_port: int = 8000
