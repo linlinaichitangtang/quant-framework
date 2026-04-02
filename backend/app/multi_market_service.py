@@ -1,9 +1,13 @@
 """
 V1.7 多市场扩展服务层 — 期货、加密货币、ETF、跨市场套利、全球时区
+真实API对接 + 优雅降级（graceful degradation）
 """
 import math
 import random
 import json
+import logging
+import time
+import requests
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
@@ -11,6 +15,37 @@ try:
     import pytz
 except ImportError:
     pytz = None
+
+logger = logging.getLogger(__name__)
+
+
+# ==================== API 缓存机制（30秒过期） ====================
+
+class _APICache:
+    """简单的带过期时间的缓存，避免频繁调用外部 API"""
+
+    _cache: Dict[str, tuple] = {}
+    _ttl = 30  # 缓存有效期（秒）
+
+    @classmethod
+    def get(cls, key: str):
+        """获取缓存，过期或不存在返回 None"""
+        if key in cls._cache:
+            value, timestamp = cls._cache[key]
+            if time.time() - timestamp < cls._ttl:
+                return value
+            del cls._cache[key]
+        return None
+
+    @classmethod
+    def set(cls, key: str, value):
+        """写入缓存"""
+        cls._cache[key] = (value, time.time())
+
+    @classmethod
+    def clear(cls):
+        """清空缓存"""
+        cls._cache.clear()
 
 
 class MultiMarketService:
@@ -89,9 +124,328 @@ class MultiMarketService:
         "SF": 7200, "ZC": 800, "AP": 8500, "CJ": 12000,
     }
 
+    # ==================== 加密货币相关 ====================
+
+    # 模拟加密货币数据（用于降级方案）
+    _CRYPTO_DATA = {
+        "BTC/USDT": {"name": "比特币", "base_currency": "BTC", "quote_currency": "USDT",
+                      "price": 67500, "market_cap": 1320000000000, "circulating_supply": 19600000},
+        "ETH/USDT": {"name": "以太坊", "base_currency": "ETH", "quote_currency": "USDT",
+                      "price": 3450, "market_cap": 415000000000, "circulating_supply": 120000000},
+        "BNB/USDT": {"name": "币安币", "base_currency": "BNB", "quote_currency": "USDT",
+                      "price": 580, "market_cap": 88000000000, "circulating_supply": 153000000},
+        "SOL/USDT": {"name": "Solana", "base_currency": "SOL", "quote_currency": "USDT",
+                      "price": 178, "market_cap": 78000000000, "circulating_supply": 438000000},
+        "XRP/USDT": {"name": "瑞波币", "base_currency": "XRP", "quote_currency": "USDT",
+                      "price": 0.62, "market_cap": 34000000000, "circulating_supply": 54800000000},
+        "ADA/USDT": {"name": "艾达币", "base_currency": "ADA", "quote_currency": "USDT",
+                      "price": 0.48, "market_cap": 17000000000, "circulating_supply": 35400000000},
+        "DOGE/USDT": {"name": "狗狗币", "base_currency": "DOGE", "quote_currency": "USDT",
+                      "price": 0.165, "market_cap": 23500000000, "circulating_supply": 143000000000},
+        "DOT/USDT": {"name": "波卡", "base_currency": "DOT", "quote_currency": "USDT",
+                      "price": 7.85, "market_cap": 10500000000, "circulating_supply": 1340000000},
+        "AVAX/USDT": {"name": "雪崩协议", "base_currency": "AVAX", "quote_currency": "USDT",
+                      "price": 38.5, "market_cap": 14500000000, "circulating_supply": 377000000},
+        "LINK/USDT": {"name": "Chainlink", "base_currency": "LINK", "quote_currency": "USDT",
+                      "price": 18.2, "market_cap": 10800000000, "circulating_supply": 594000000},
+        "MATIC/USDT": {"name": "Polygon", "base_currency": "MATIC", "quote_currency": "USDT",
+                      "price": 0.72, "market_cap": 7100000000, "circulating_supply": 9900000000},
+        "UNI/USDT": {"name": "Uniswap", "base_currency": "UNI", "quote_currency": "USDT",
+                      "price": 11.5, "market_cap": 6900000000, "circulating_supply": 600000000},
+        "LTC/USDT": {"name": "莱特币", "base_currency": "LTC", "quote_currency": "USDT",
+                      "price": 85.5, "market_cap": 6400000000, "circulating_supply": 74800000},
+        "EOS/USDT": {"name": "EOS", "base_currency": "EOS", "quote_currency": "USDT",
+                      "price": 0.92, "market_cap": 1050000000, "circulating_supply": 1140000000},
+        "ATOM/USDT": {"name": "Cosmos", "base_currency": "ATOM", "quote_currency": "USDT",
+                      "price": 9.8, "market_cap": 3700000000, "circulating_supply": 378000000},
+    }
+
+    # Binance 交易对基础符号列表
+    _CRYPTO_SYMBOLS = [
+        "BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "DOGE", "DOT",
+        "AVAX", "LINK", "MATIC", "UNI", "LTC", "EOS", "ATOM",
+    ]
+
+    # 加密货币中文名称映射
+    _CRYPTO_NAMES = {
+        "BTC": "比特币", "ETH": "以太坊", "BNB": "币安币", "SOL": "Solana",
+        "XRP": "瑞波币", "ADA": "艾达币", "DOGE": "狗狗币", "DOT": "波卡",
+        "AVAX": "雪崩协议", "LINK": "Chainlink", "MATIC": "Polygon",
+        "UNI": "Uniswap", "LTC": "莱特币", "EOS": "EOS", "ATOM": "Cosmos",
+    }
+
+    # ==================== ETF 相关 ====================
+
+    # 模拟 ETF 数据（用于降级方案）
+    _ETF_DATA = {
+        "A": [
+            {"symbol": "510300", "name": "沪深300ETF", "nav": 4.12, "price": 4.15, "total_assets": 2100,
+             "expense_ratio": 0.50, "tracking_index": "沪深300指数",
+             "top_holdings": [{"name": "贵州茅台", "weight": 5.2}, {"name": "宁德时代", "weight": 3.8},
+                              {"name": "中国平安", "weight": 3.1}, {"name": "招商银行", "weight": 2.8},
+                              {"name": "隆基绿能", "weight": 2.1}],
+             "sector_allocation": {"金融": 22.5, "消费": 18.3, "医药": 12.1, "科技": 15.6, "新能源": 10.2, "其他": 21.3}},
+            {"symbol": "510500", "name": "中证500ETF", "nav": 6.85, "price": 6.88, "total_assets": 850,
+             "expense_ratio": 0.60, "tracking_index": "中证500指数",
+             "top_holdings": [{"name": "药明康德", "weight": 1.2}, {"name": "智飞生物", "weight": 0.9},
+                              {"name": "东方财富", "weight": 0.8}, {"name": "天齐锂业", "weight": 0.7},
+                              {"name": "韦尔股份", "weight": 0.6}],
+             "sector_allocation": {"工业": 20.1, "材料": 18.5, "医药": 14.2, "科技": 13.8, "消费": 12.3, "其他": 21.1}},
+            {"symbol": "159915", "name": "创业板ETF", "nav": 2.35, "price": 2.38, "total_assets": 420,
+             "expense_ratio": 0.60, "tracking_index": "创业板指数",
+             "top_holdings": [{"name": "宁德时代", "weight": 8.5}, {"name": "东方财富", "weight": 6.2},
+                              {"name": "迈瑞医疗", "weight": 4.1}, {"name": "汇川技术", "weight": 3.5},
+                              {"name": "阳光电源", "weight": 2.8}],
+             "sector_allocation": {"新能源": 28.5, "医药": 15.2, "科技": 18.3, "工业": 10.5, "消费": 8.2, "其他": 19.3}},
+            {"symbol": "510050", "name": "上证50ETF", "nav": 2.82, "price": 2.84, "total_assets": 680,
+             "expense_ratio": 0.50, "tracking_index": "上证50指数",
+             "top_holdings": [{"name": "贵州茅台", "weight": 12.5}, {"name": "中国平安", "weight": 8.2},
+                              {"name": "招商银行", "weight": 6.8}, {"name": "恒瑞医药", "weight": 4.5},
+                              {"name": "长江电力", "weight": 3.8}],
+             "sector_allocation": {"金融": 35.2, "消费": 22.1, "医药": 8.5, "能源": 6.3, "科技": 5.2, "其他": 22.7}},
+            {"symbol": "510880", "name": "红利ETF", "nav": 3.15, "price": 3.18, "total_assets": 520,
+             "expense_ratio": 0.50, "tracking_index": "上证红利指数",
+             "top_holdings": [{"name": "中国神华", "weight": 5.8}, {"name": "唐山港", "weight": 4.2},
+                              {"name": "中国石化", "weight": 3.9}, {"name": "宝钢股份", "weight": 3.5},
+                              {"name": "建设银行", "weight": 3.2}],
+             "sector_allocation": {"能源": 22.1, "金融": 20.5, "材料": 15.8, "工业": 12.3, "公用事业": 10.5, "其他": 18.8}},
+            {"symbol": "512100", "name": "中证1000ETF", "nav": 1.95, "price": 1.97, "total_assets": 380,
+             "expense_ratio": 0.50, "tracking_index": "中证1000指数",
+             "top_holdings": [{"name": "思瑞浦", "weight": 0.5}, {"name": "华海诚科", "weight": 0.4},
+                              {"name": "诺思格", "weight": 0.3}, {"name": "科前生物", "weight": 0.3},
+                              {"name": "安路科技", "weight": 0.3}],
+             "sector_allocation": {"工业": 18.5, "科技": 16.2, "材料": 14.8, "医药": 12.1, "消费": 10.5, "其他": 27.9}},
+        ],
+        "HK": [
+            {"symbol": "2822.HK", "name": "盈富基金", "nav": 18.5, "price": 18.6, "total_assets": 1200,
+             "expense_ratio": 0.08, "tracking_index": "恒生指数",
+             "top_holdings": [{"name": "腾讯控股", "weight": 10.5}, {"name": "汇丰控股", "weight": 8.2},
+                              {"name": "阿里巴巴", "weight": 7.8}, {"name": "友邦保险", "weight": 6.5},
+                              {"name": "美团", "weight": 4.2}],
+             "sector_allocation": {"金融": 32.5, "科技": 28.3, "消费": 12.1, "地产": 8.5, "能源": 5.2, "其他": 13.4}},
+            {"symbol": "3188.HK", "name": "恒生科技ETF", "nav": 5.2, "price": 5.25, "total_assets": 680,
+             "expense_ratio": 0.22, "tracking_index": "恒生科技指数",
+             "top_holdings": [{"name": "腾讯控股", "weight": 12.8}, {"name": "阿里巴巴", "weight": 10.2},
+                              {"name": "美团", "weight": 8.5}, {"name": "小米集团", "weight": 7.2},
+                              {"name": "京东集团", "weight": 6.8}],
+             "sector_allocation": {"科技": 45.2, "消费": 22.5, "金融": 10.3, "医药": 5.8, "工业": 3.2, "其他": 13.0}},
+            {"symbol": "7500.HK", "name": "南方恒生科技", "nav": 1.85, "price": 1.87, "total_assets": 320,
+             "expense_ratio": 0.22, "tracking_index": "恒生科技指数",
+             "top_holdings": [{"name": "腾讯控股", "weight": 12.5}, {"name": "阿里巴巴", "weight": 10.0},
+                              {"name": "美团", "weight": 8.3}, {"name": "小米集团", "weight": 7.0},
+                              {"name": "京东集团", "weight": 6.5}],
+             "sector_allocation": {"科技": 44.8, "消费": 23.1, "金融": 10.5, "医药": 5.5, "工业": 3.5, "其他": 12.6}},
+        ],
+        "US": [
+            {"symbol": "SPY", "name": "SPDR标普500ETF", "nav": 520.5, "price": 522.3, "total_assets": 5200,
+             "expense_ratio": 0.09, "tracking_index": "S&P 500",
+             "top_holdings": [{"name": "Apple", "weight": 7.1}, {"name": "Microsoft", "weight": 6.8},
+                              {"name": "NVIDIA", "weight": 5.2}, {"name": "Amazon", "weight": 3.8},
+                              {"name": "Meta", "weight": 2.5}],
+             "sector_allocation": {"科技": 31.2, "医疗": 12.5, "金融": 13.1, "消费": 10.8, "工业": 8.5, "其他": 23.9}},
+            {"symbol": "QQQ", "name": "Invesco QQQ", "nav": 450.2, "price": 453.8, "total_assets": 2800,
+             "expense_ratio": 0.20, "tracking_index": "纳斯达克100",
+             "top_holdings": [{"name": "Apple", "weight": 11.2}, {"name": "Microsoft", "weight": 10.5},
+                              {"name": "NVIDIA", "weight": 8.2}, {"name": "Amazon", "weight": 5.8},
+                              {"name": "Meta", "weight": 4.2}],
+             "sector_allocation": {"科技": 52.3, "消费": 16.5, "医疗": 6.8, "工业": 5.2, "通信": 3.8, "其他": 15.4}},
+            {"symbol": "IWM", "name": "iShares罗素2000", "nav": 215.8, "price": 217.2, "total_assets": 650,
+             "expense_ratio": 0.19, "tracking_index": "罗素2000指数",
+             "top_holdings": [{"name": "Super Micro Computer", "weight": 0.6}, {"name": "Tenet Healthcare", "weight": 0.5},
+                              {"name": "e.l.f. Beauty", "weight": 0.4}, {"name": "First Solar", "weight": 0.4},
+                              {"name": "Insulet", "weight": 0.4}],
+             "sector_allocation": {"科技": 15.2, "医疗": 14.8, "金融": 16.5, "工业": 14.2, "消费": 12.1, "其他": 27.2}},
+            {"symbol": "VTI", "name": "Vanguard全市场ETF", "nav": 268.5, "price": 270.1, "total_assets": 4200,
+             "expense_ratio": 0.03, "tracking_index": "CRSP US Total Market",
+             "top_holdings": [{"name": "Apple", "weight": 5.8}, {"name": "Microsoft", "weight": 5.5},
+                              {"name": "NVIDIA", "weight": 4.2}, {"name": "Amazon", "weight": 3.1},
+                              {"name": "Meta", "weight": 2.1}],
+             "sector_allocation": {"科技": 28.5, "医疗": 11.8, "金融": 12.5, "消费": 10.2, "工业": 8.8, "其他": 28.2}},
+            {"symbol": "ARKK", "name": "ARK Innovation", "nav": 52.8, "price": 53.5, "total_assets": 85,
+             "expense_ratio": 0.75, "tracking_index": "主动管理",
+             "top_holdings": [{"name": "Tesla", "weight": 12.5}, {"name": "Roku", "weight": 8.2},
+                              {"name": "Block", "weight": 7.5}, {"name": "CRISPR Therapeutics", "weight": 6.8},
+                              {"name": "Zoom", "weight": 5.5}],
+             "sector_allocation": {"科技": 42.5, "医疗": 18.2, "消费": 15.8, "金融": 5.2, "工业": 3.5, "其他": 14.8}},
+        ],
+    }
+
+    # ==================== 全球市场时区 ====================
+
+    # 各市场交易时间配置
+    _MARKET_HOURS = {
+        "A": {  # A股
+            "timezone": "Asia/Shanghai",
+            "open_time": "09:30",
+            "close_time": "15:00",
+            "morning_open": "09:30",
+            "morning_close": "11:30",
+            "afternoon_open": "13:00",
+            "afternoon_close": "15:00",
+            "pre_market_start": "09:15",
+            "pre_market_end": "09:25",
+        },
+        "HK": {  # 港股
+            "timezone": "Asia/Hong_Kong",
+            "open_time": "09:30",
+            "close_time": "16:00",
+            "morning_open": "09:30",
+            "morning_close": "12:00",
+            "afternoon_open": "13:00",
+            "afternoon_close": "16:00",
+            "pre_market_start": "09:00",
+            "pre_market_end": "09:30",
+        },
+        "US": {  # 美股
+            "timezone": "America/New_York",
+            "open_time": "09:30",
+            "close_time": "16:00",
+            "pre_market_start": "04:00",
+            "pre_market_end": "09:30",
+            "after_hours_start": "16:00",
+            "after_hours_end": "20:00",
+        },
+        "UK": {  # 伦敦
+            "timezone": "Europe/London",
+            "open_time": "08:00",
+            "close_time": "16:30",
+        },
+        "JP": {  # 日本
+            "timezone": "Asia/Tokyo",
+            "open_time": "09:00",
+            "close_time": "15:00",
+            "morning_open": "09:00",
+            "morning_close": "11:30",
+            "afternoon_open": "12:30",
+            "afternoon_close": "15:00",
+        },
+        "DE": {  # 德国
+            "timezone": "Europe/Berlin",
+            "open_time": "09:00",
+            "close_time": "17:30",
+        },
+        "CRYPTO": {  # 加密货币（24/7）
+            "timezone": "UTC",
+            "open_time": "00:00",
+            "close_time": "23:59",
+            "is_24h": True,
+        },
+    }
+
+    # ==================== 跨市场套利 ====================
+
+    # 模拟跨市场标的对
+    _CROSS_MARKET_PAIRS = [
+        {"symbol_a": "510300", "market_a": "A", "symbol_b": "2822.HK", "market_b": "HK", "name": "沪深300 A/H"},
+        {"symbol_a": "510050", "market_a": "A", "symbol_b": "2822.HK", "market_b": "HK", "name": "上证50 A/H"},
+        {"symbol_a": "SPY", "market_a": "US", "symbol_b": "2822.HK", "market_b": "HK", "name": "标普500/恒指"},
+        {"symbol_a": "QQQ", "market_a": "US", "symbol_b": "3188.HK", "market_b": "HK", "name": "纳指100/恒生科技"},
+        {"symbol_a": "IF", "market_a": "A", "symbol_b": "SPY", "market_b": "US", "name": "沪深300期货/标普500"},
+        {"symbol_a": "AU", "market_a": "A", "symbol_b": "GLD", "market_b": "US", "name": "黄金期货/黄金ETF"},
+        {"symbol_a": "BTC/USDT", "market_a": "CRYPTO", "symbol_b": "COIN", "market_b": "US", "name": "BTC/Coinbase"},
+        {"symbol_a": "510300", "market_a": "A", "symbol_b": "SPY", "market_b": "US", "name": "沪深300/标普500"},
+        {"symbol_a": "T", "market_a": "A", "symbol_b": "TLT", "market_b": "US", "name": "国债期货/美债ETF"},
+        {"symbol_a": "CU", "market_a": "A", "symbol_b": "CPER", "market_b": "US", "name": "沪铜/铜ETF"},
+    ]
+
+    # ================================================================
+    #  模拟数据生成方法（私有，作为 API 降级方案）
+    # ================================================================
+
     @classmethod
-    def get_futures_contracts(cls, db, exchange: Optional[str] = None, underlying: Optional[str] = None) -> list:
-        """获取期货合约列表"""
+    def _generate_mock_crypto_markets(cls) -> list:
+        """生成模拟加密货币市场列表（降级方案）"""
+        markets = []
+        for symbol, data in cls._CRYPTO_DATA.items():
+            change_24h = round(random.uniform(-8.0, 8.0), 2)
+            price = round(data["price"] * (1 + random.uniform(-0.03, 0.03)), data["price"] < 1 and 4 or 2)
+            markets.append({
+                "symbol": symbol,
+                "name": data["name"],
+                "base_currency": data["base_currency"],
+                "quote_currency": data["quote_currency"],
+                "last_price": price,
+                "change_24h": change_24h,
+                "high_24h": round(price * (1 + abs(random.uniform(0.01, 0.05))), data["price"] < 1 and 4 or 2),
+                "low_24h": round(price * (1 - abs(random.uniform(0.01, 0.05))), data["price"] < 1 and 4 or 2),
+                "volume_24h": round(random.uniform(100000000, 50000000000), 2),
+                "market_cap": data["market_cap"],
+                "circulating_supply": data["circulating_supply"],
+            })
+        # 按市值降序排列
+        markets.sort(key=lambda x: x["market_cap"], reverse=True)
+        return markets
+
+    @classmethod
+    def _generate_mock_crypto_quote(cls, symbol: str) -> dict:
+        """生成模拟加密货币行情（降级方案）"""
+        data = cls._CRYPTO_DATA.get(symbol)
+        if not data:
+            return {"symbol": symbol, "error": "交易对不存在"}
+
+        change_24h = round(random.uniform(-8.0, 8.0), 2)
+        price = round(data["price"] * (1 + random.uniform(-0.03, 0.03)), data["price"] < 1 and 4 or 2)
+        decimals = 4 if data["price"] < 1 else 2
+
+        return {
+            "symbol": symbol,
+            "name": data["name"],
+            "base_currency": data["base_currency"],
+            "quote_currency": data["quote_currency"],
+            "last_price": price,
+            "change_24h": change_24h,
+            "high_24h": round(price * (1 + abs(random.uniform(0.01, 0.05))), decimals),
+            "low_24h": round(price * (1 - abs(random.uniform(0.01, 0.05))), decimals),
+            "volume_24h": round(random.uniform(100000000, 50000000000), 2),
+            "market_cap": data["market_cap"],
+            "circulating_supply": data["circulating_supply"],
+            "bid": round(price * 0.9999, decimals),
+            "ask": round(price * 1.0001, decimals),
+        }
+
+    @classmethod
+    def _generate_mock_crypto_klines(cls, symbol: str, interval: str = "1h", limit: int = 100) -> list:
+        """生成模拟加密货币K线数据（降级方案）"""
+        data = cls._CRYPTO_DATA.get(symbol)
+        if not data:
+            return []
+
+        klines = []
+        base_price = data["price"]
+        now = datetime.now()
+
+        # 根据时间间隔确定时间增量
+        interval_map = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400}
+        delta_seconds = interval_map.get(interval, 3600)
+
+        # 生成模拟K线
+        price = base_price
+        for i in range(limit):
+            ts = now - timedelta(seconds=delta_seconds * (limit - i))
+            change = random.uniform(-0.02, 0.02)
+            open_p = price
+            close_p = price * (1 + change)
+            high_p = max(open_p, close_p) * (1 + random.uniform(0, 0.01))
+            low_p = min(open_p, close_p) * (1 - random.uniform(0, 0.01))
+            volume = random.uniform(100, 10000)
+
+            decimals = 4 if base_price < 1 else 2
+            klines.append({
+                "timestamp": int(ts.timestamp() * 1000),
+                "datetime": ts.strftime("%Y-%m-%d %H:%M:%S"),
+                "open": round(open_p, decimals),
+                "high": round(high_p, decimals),
+                "low": round(low_p, decimals),
+                "close": round(close_p, decimals),
+                "volume": round(volume, 2),
+            })
+            price = close_p
+
+        return klines
+
+    @classmethod
+    def _generate_mock_futures_contracts(cls, exchange: str = None) -> list:
+        """生成模拟期货合约列表（降级方案）"""
         contracts = []
         now = datetime.now()
         # 生成当季、下季、远季合约月份
@@ -107,8 +461,6 @@ class MultiMarketService:
             if ex not in cls._FUTURES_DATA:
                 continue
             for code, info in cls._FUTURES_DATA[ex].items():
-                if underlying and code != underlying:
-                    continue
                 base_price = cls._FUTURES_BASE_PRICES.get(code, 5000)
                 for month in months:
                     # 生成随机行情
@@ -129,6 +481,103 @@ class MultiMarketService:
                         "open_interest": round(random.uniform(50000, 800000)),
                     })
         return contracts
+
+    @classmethod
+    def _generate_mock_etf_list(cls, market: str = "A") -> list:
+        """生成模拟ETF列表（降级方案）"""
+        etfs = []
+        markets = [market] if market else list(cls._ETF_DATA.keys())
+        for m in markets:
+            if m not in cls._ETF_DATA:
+                continue
+            for etf in cls._ETF_DATA[m]:
+                price = round(etf["price"] * (1 + random.uniform(-0.01, 0.01)), 3)
+                nav = etf["nav"]
+                premium_rate = round((price - nav) / nav * 100, 2)
+                etfs.append({
+                    "symbol": etf["symbol"],
+                    "name": etf["name"],
+                    "market": m,
+                    "nav": nav,
+                    "price": price,
+                    "premium_rate": premium_rate,
+                    "total_assets": etf["total_assets"],
+                    "expense_ratio": etf["expense_ratio"],
+                    "tracking_index": etf["tracking_index"],
+                })
+        return etfs
+
+    @classmethod
+    def _generate_mock_indices(cls) -> list:
+        """生成模拟全球指数数据（降级方案）"""
+        indices = [
+            {"symbol": "000001.SH", "name": "上证指数", "market": "A", "price": 3150.5,
+             "change_pct": round(random.uniform(-2, 2), 2)},
+            {"symbol": "399001.SZ", "name": "深证成指", "market": "A", "price": 10250.8,
+             "change_pct": round(random.uniform(-2.5, 2.5), 2)},
+            {"symbol": "399006.SZ", "name": "创业板指", "market": "A", "price": 2050.3,
+             "change_pct": round(random.uniform(-3, 3), 2)},
+            {"symbol": "HSI", "name": "恒生指数", "market": "HK", "price": 18250.5,
+             "change_pct": round(random.uniform(-2, 2), 2)},
+            {"symbol": "HSCEI", "name": "国企指数", "market": "HK", "price": 6350.2,
+             "change_pct": round(random.uniform(-2, 2), 2)},
+            {"symbol": "IXIC", "name": "纳斯达克指数", "market": "US", "price": 16850.3,
+             "change_pct": round(random.uniform(-2, 2), 2)},
+            {"symbol": "SPX", "name": "标普500指数", "market": "US", "price": 5350.8,
+             "change_pct": round(random.uniform(-1.5, 1.5), 2)},
+            {"symbol": "DJI", "name": "道琼斯指数", "market": "US", "price": 39850.5,
+             "change_pct": round(random.uniform(-1.5, 1.5), 2)},
+            {"symbol": "N225", "name": "日经225指数", "market": "JP", "price": 40250.8,
+             "change_pct": round(random.uniform(-2, 2), 2)},
+            {"symbol": "FTSE", "name": "富时100指数", "market": "UK", "price": 8250.5,
+             "change_pct": round(random.uniform(-1.5, 1.5), 2)},
+            {"symbol": "GDAXI", "name": "德国DAX指数", "market": "DE", "price": 18550.2,
+             "change_pct": round(random.uniform(-1.5, 1.5), 2)},
+            {"symbol": "BTC", "name": "比特币", "market": "CRYPTO", "price": 67500,
+             "change_pct": round(random.uniform(-5, 5), 2)},
+        ]
+        # 添加随机波动
+        for idx in indices:
+            idx["price"] = round(idx["price"] * (1 + random.uniform(-0.005, 0.005)), 2)
+        return indices
+
+    # ================================================================
+    #  公开方法 — 真实 API 优先，失败时自动降级到模拟数据
+    # ================================================================
+
+    # ==================== 期货相关 ====================
+
+    @classmethod
+    def get_futures_contracts(cls, exchange: str = None) -> list:
+        """获取期货合约列表（akshare 真实数据，失败降级到模拟）"""
+        cache_key = f"futures_contracts:{exchange or 'all'}"
+        cached = _APICache.get(cache_key)
+        if cached is not None:
+            return cached
+        try:
+            import akshare as ak
+            # 使用新浪期货实时行情接口
+            df = ak.futures_zh_spot()
+            if df is not None and len(df) > 0:
+                contracts = []
+                cols = list(df.columns)
+                for _, row in df.head(100).iterrows():
+                    contracts.append({
+                        "symbol": str(row.iloc[0]) if len(row) > 0 else "",
+                        "name": str(row.iloc[1]) if len(row) > 1 else "",
+                        "exchange": exchange or "CFFEX",
+                        "last_price": float(row.iloc[2]) if len(row) > 2 else 0,
+                        "change_pct": float(row.iloc[3]) if len(row) > 3 else 0,
+                        "volume": float(row.iloc[4]) if len(row) > 4 else 0,
+                    })
+                _APICache.set(cache_key, contracts)
+                return contracts
+        except Exception as e:
+            logger.warning(f"akshare 期货数据获取失败: {e}")
+        # 降级到模拟数据
+        result = cls._generate_mock_futures_contracts(exchange)
+        _APICache.set(cache_key, result)
+        return result
 
     @classmethod
     def get_futures_quote(cls, symbol: str, exchange: Optional[str] = None) -> dict:
@@ -223,253 +672,162 @@ class MultiMarketService:
             "price": price,
         }
 
-    # ==================== 加密货币相关 ====================
-
-    # 模拟加密货币数据
-    _CRYPTO_DATA = {
-        "BTC/USDT": {"name": "比特币", "base_currency": "BTC", "quote_currency": "USDT",
-                      "price": 67500, "market_cap": 1320000000000, "circulating_supply": 19600000},
-        "ETH/USDT": {"name": "以太坊", "base_currency": "ETH", "quote_currency": "USDT",
-                      "price": 3450, "market_cap": 415000000000, "circulating_supply": 120000000},
-        "BNB/USDT": {"name": "币安币", "base_currency": "BNB", "quote_currency": "USDT",
-                      "price": 580, "market_cap": 88000000000, "circulating_supply": 153000000},
-        "SOL/USDT": {"name": "Solana", "base_currency": "SOL", "quote_currency": "USDT",
-                      "price": 178, "market_cap": 78000000000, "circulating_supply": 438000000},
-        "XRP/USDT": {"name": "瑞波币", "base_currency": "XRP", "quote_currency": "USDT",
-                      "price": 0.62, "market_cap": 34000000000, "circulating_supply": 54800000000},
-        "ADA/USDT": {"name": "艾达币", "base_currency": "ADA", "quote_currency": "USDT",
-                      "price": 0.48, "market_cap": 17000000000, "circulating_supply": 35400000000},
-        "DOGE/USDT": {"name": "狗狗币", "base_currency": "DOGE", "quote_currency": "USDT",
-                      "price": 0.165, "market_cap": 23500000000, "circulating_supply": 143000000000},
-        "DOT/USDT": {"name": "波卡", "base_currency": "DOT", "quote_currency": "USDT",
-                      "price": 7.85, "market_cap": 10500000000, "circulating_supply": 1340000000},
-        "AVAX/USDT": {"name": "雪崩协议", "base_currency": "AVAX", "quote_currency": "USDT",
-                      "price": 38.5, "market_cap": 14500000000, "circulating_supply": 377000000},
-        "LINK/USDT": {"name": "Chainlink", "base_currency": "LINK", "quote_currency": "USDT",
-                      "price": 18.2, "market_cap": 10800000000, "circulating_supply": 594000000},
-        "MATIC/USDT": {"name": "Polygon", "base_currency": "MATIC", "quote_currency": "USDT",
-                      "price": 0.72, "market_cap": 7100000000, "circulating_supply": 9900000000},
-        "UNI/USDT": {"name": "Uniswap", "base_currency": "UNI", "quote_currency": "USDT",
-                      "price": 11.5, "market_cap": 6900000000, "circulating_supply": 600000000},
-        "LTC/USDT": {"name": "莱特币", "base_currency": "LTC", "quote_currency": "USDT",
-                      "price": 85.5, "market_cap": 6400000000, "circulating_supply": 74800000},
-        "EOS/USDT": {"name": "EOS", "base_currency": "EOS", "quote_currency": "USDT",
-                      "price": 0.92, "market_cap": 1050000000, "circulating_supply": 1140000000},
-        "ATOM/USDT": {"name": "Cosmos", "base_currency": "ATOM", "quote_currency": "USDT",
-                      "price": 9.8, "market_cap": 3700000000, "circulating_supply": 378000000},
-    }
+    # ==================== 加密货币相关（Binance 真实数据） ====================
 
     @classmethod
     def get_crypto_markets(cls) -> list:
-        """获取加密货币市场列表"""
-        markets = []
-        for symbol, data in cls._CRYPTO_DATA.items():
-            change_24h = round(random.uniform(-8.0, 8.0), 2)
-            price = round(data["price"] * (1 + random.uniform(-0.03, 0.03)), data["price"] < 1 and 4 or 2)
-            markets.append({
-                "symbol": symbol,
-                "name": data["name"],
-                "base_currency": data["base_currency"],
-                "quote_currency": data["quote_currency"],
-                "last_price": price,
-                "change_24h": change_24h,
-                "high_24h": round(price * (1 + abs(random.uniform(0.01, 0.05))), data["price"] < 1 and 4 or 2),
-                "low_24h": round(price * (1 - abs(random.uniform(0.01, 0.05))), data["price"] < 1 and 4 or 2),
-                "volume_24h": round(random.uniform(100000000, 50000000000), 2),
-                "market_cap": data["market_cap"],
-                "circulating_supply": data["circulating_supply"],
-            })
-        # 按市值降序排列
-        markets.sort(key=lambda x: x["market_cap"], reverse=True)
-        return markets
+        """获取加密货币市场列表（Binance 真实数据）"""
+        cache_key = "crypto_markets"
+        cached = _APICache.get(cache_key)
+        if cached is not None:
+            return cached
+        try:
+            resp = requests.get(
+                "https://api.binance.com/api/v3/ticker/24hr",
+                params={"symbols": json.dumps([f"{s}USDT" for s in cls._CRYPTO_SYMBOLS])},
+                timeout=10
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                result = [{
+                    "symbol": d["symbol"],
+                    "name": cls._CRYPTO_NAMES.get(d["symbol"].replace("USDT", ""), d["symbol"]),
+                    "base_currency": d["symbol"].replace("USDT", ""),
+                    "quote_currency": "USDT",
+                    "last_price": float(d["lastPrice"]),
+                    "change_24h": float(d["priceChangePercent"]),
+                    "high_24h": float(d["highPrice"]),
+                    "low_24h": float(d["lowPrice"]),
+                    "volume_24h": float(d["volume"]),
+                    "market_cap": float(d["quoteVolume"]),
+                } for d in data]
+                _APICache.set(cache_key, result)
+                return result
+        except Exception as e:
+            logger.warning(f"Binance API 不可用，使用模拟数据: {e}")
+        # 降级到模拟数据
+        result = cls._generate_mock_crypto_markets()
+        _APICache.set(cache_key, result)
+        return result
 
     @classmethod
     def get_crypto_quote(cls, symbol: str) -> dict:
-        """获取加密货币行情"""
-        data = cls._CRYPTO_DATA.get(symbol)
-        if not data:
-            return {"symbol": symbol, "error": "交易对不存在"}
-
-        change_24h = round(random.uniform(-8.0, 8.0), 2)
-        price = round(data["price"] * (1 + random.uniform(-0.03, 0.03)), data["price"] < 1 and 4 or 2)
-        decimals = 4 if data["price"] < 1 else 2
-
-        return {
-            "symbol": symbol,
-            "name": data["name"],
-            "base_currency": data["base_currency"],
-            "quote_currency": data["quote_currency"],
-            "last_price": price,
-            "change_24h": change_24h,
-            "high_24h": round(price * (1 + abs(random.uniform(0.01, 0.05))), decimals),
-            "low_24h": round(price * (1 - abs(random.uniform(0.01, 0.05))), decimals),
-            "volume_24h": round(random.uniform(100000000, 50000000000), 2),
-            "market_cap": data["market_cap"],
-            "circulating_supply": data["circulating_supply"],
-            "bid": round(price * 0.9999, decimals),
-            "ask": round(price * 1.0001, decimals),
-        }
-
-    @classmethod
-    def get_crypto_klines(cls, symbol: str, interval: str = "1h", limit: int = 100) -> list:
-        """获取加密货币K线数据"""
-        data = cls._CRYPTO_DATA.get(symbol)
-        if not data:
-            return []
-
-        klines = []
-        base_price = data["price"]
-        now = datetime.now()
-
-        # 根据时间间隔确定时间增量
-        interval_map = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400}
-        delta_seconds = interval_map.get(interval, 3600)
-
-        # 生成模拟K线
-        price = base_price
-        for i in range(limit):
-            ts = now - timedelta(seconds=delta_seconds * (limit - i))
-            change = random.uniform(-0.02, 0.02)
-            open_p = price
-            close_p = price * (1 + change)
-            high_p = max(open_p, close_p) * (1 + random.uniform(0, 0.01))
-            low_p = min(open_p, close_p) * (1 - random.uniform(0, 0.01))
-            volume = random.uniform(100, 10000)
-
-            decimals = 4 if base_price < 1 else 2
-            klines.append({
-                "timestamp": int(ts.timestamp() * 1000),
-                "datetime": ts.strftime("%Y-%m-%d %H:%M:%S"),
-                "open": round(open_p, decimals),
-                "high": round(high_p, decimals),
-                "low": round(low_p, decimals),
-                "close": round(close_p, decimals),
-                "volume": round(volume, 2),
-            })
-            price = close_p
-
-        return klines
-
-    # ==================== ETF 相关 ====================
-
-    # 模拟 ETF 数据
-    _ETF_DATA = {
-        "A": [
-            {"symbol": "510300", "name": "沪深300ETF", "nav": 4.12, "price": 4.15, "total_assets": 2100,
-             "expense_ratio": 0.50, "tracking_index": "沪深300指数",
-             "top_holdings": [{"name": "贵州茅台", "weight": 5.2}, {"name": "宁德时代", "weight": 3.8},
-                              {"name": "中国平安", "weight": 3.1}, {"name": "招商银行", "weight": 2.8},
-                              {"name": "隆基绿能", "weight": 2.1}],
-             "sector_allocation": {"金融": 22.5, "消费": 18.3, "医药": 12.1, "科技": 15.6, "新能源": 10.2, "其他": 21.3}},
-            {"symbol": "510500", "name": "中证500ETF", "nav": 6.85, "price": 6.88, "total_assets": 850,
-             "expense_ratio": 0.60, "tracking_index": "中证500指数",
-             "top_holdings": [{"name": "药明康德", "weight": 1.2}, {"name": "智飞生物", "weight": 0.9},
-                              {"name": "东方财富", "weight": 0.8}, {"name": "天齐锂业", "weight": 0.7},
-                              {"name": "韦尔股份", "weight": 0.6}],
-             "sector_allocation": {"工业": 20.1, "材料": 18.5, "医药": 14.2, "科技": 13.8, "消费": 12.3, "其他": 21.1}},
-            {"symbol": "159915", "name": "创业板ETF", "nav": 2.35, "price": 2.38, "total_assets": 420,
-             "expense_ratio": 0.60, "tracking_index": "创业板指数",
-             "top_holdings": [{"name": "宁德时代", "weight": 8.5}, {"name": "东方财富", "weight": 6.2},
-                              {"name": "迈瑞医疗", "weight": 4.1}, {"name": "汇川技术", "weight": 3.5},
-                              {"name": "阳光电源", "weight": 2.8}],
-             "sector_allocation": {"新能源": 28.5, "医药": 15.2, "科技": 18.3, "工业": 10.5, "消费": 8.2, "其他": 19.3}},
-            {"symbol": "510050", "name": "上证50ETF", "nav": 2.82, "price": 2.84, "total_assets": 680,
-             "expense_ratio": 0.50, "tracking_index": "上证50指数",
-             "top_holdings": [{"name": "贵州茅台", "weight": 12.5}, {"name": "中国平安", "weight": 8.2},
-                              {"name": "招商银行", "weight": 6.8}, {"name": "恒瑞医药", "weight": 4.5},
-                              {"name": "长江电力", "weight": 3.8}],
-             "sector_allocation": {"金融": 35.2, "消费": 22.1, "医药": 8.5, "能源": 6.3, "科技": 5.2, "其他": 22.7}},
-            {"symbol": "510880", "name": "红利ETF", "nav": 3.15, "price": 3.18, "total_assets": 520,
-             "expense_ratio": 0.50, "tracking_index": "上证红利指数",
-             "top_holdings": [{"name": "中国神华", "weight": 5.8}, {"name": "唐山港", "weight": 4.2},
-                              {"name": "中国石化", "weight": 3.9}, {"name": "宝钢股份", "weight": 3.5},
-                              {"name": "建设银行", "weight": 3.2}],
-             "sector_allocation": {"能源": 22.1, "金融": 20.5, "材料": 15.8, "工业": 12.3, "公用事业": 10.5, "其他": 18.8}},
-            {"symbol": "512100", "name": "中证1000ETF", "nav": 1.95, "price": 1.97, "total_assets": 380,
-             "expense_ratio": 0.50, "tracking_index": "中证1000指数",
-             "top_holdings": [{"name": "思瑞浦", "weight": 0.5}, {"name": "华海诚科", "weight": 0.4},
-                              {"name": "诺思格", "weight": 0.3}, {"name": "科前生物", "weight": 0.3},
-                              {"name": "安路科技", "weight": 0.3}],
-             "sector_allocation": {"工业": 18.5, "科技": 16.2, "材料": 14.8, "医药": 12.1, "消费": 10.5, "其他": 27.9}},
-        ],
-        "HK": [
-            {"symbol": "2822.HK", "name": "盈富基金", "nav": 18.5, "price": 18.6, "total_assets": 1200,
-             "expense_ratio": 0.08, "tracking_index": "恒生指数",
-             "top_holdings": [{"name": "腾讯控股", "weight": 10.5}, {"name": "汇丰控股", "weight": 8.2},
-                              {"name": "阿里巴巴", "weight": 7.8}, {"name": "友邦保险", "weight": 6.5},
-                              {"name": "美团", "weight": 4.2}],
-             "sector_allocation": {"金融": 32.5, "科技": 28.3, "消费": 12.1, "地产": 8.5, "能源": 5.2, "其他": 13.4}},
-            {"symbol": "3188.HK", "name": "恒生科技ETF", "nav": 5.2, "price": 5.25, "total_assets": 680,
-             "expense_ratio": 0.22, "tracking_index": "恒生科技指数",
-             "top_holdings": [{"name": "腾讯控股", "weight": 12.8}, {"name": "阿里巴巴", "weight": 10.2},
-                              {"name": "美团", "weight": 8.5}, {"name": "小米集团", "weight": 7.2},
-                              {"name": "京东集团", "weight": 6.8}],
-             "sector_allocation": {"科技": 45.2, "消费": 22.5, "金融": 10.3, "医药": 5.8, "工业": 3.2, "其他": 13.0}},
-            {"symbol": "7500.HK", "name": "南方恒生科技", "nav": 1.85, "price": 1.87, "total_assets": 320,
-             "expense_ratio": 0.22, "tracking_index": "恒生科技指数",
-             "top_holdings": [{"name": "腾讯控股", "weight": 12.5}, {"name": "阿里巴巴", "weight": 10.0},
-                              {"name": "美团", "weight": 8.3}, {"name": "小米集团", "weight": 7.0},
-                              {"name": "京东集团", "weight": 6.5}],
-             "sector_allocation": {"科技": 44.8, "消费": 23.1, "金融": 10.5, "医药": 5.5, "工业": 3.5, "其他": 12.6}},
-        ],
-        "US": [
-            {"symbol": "SPY", "name": "SPDR标普500ETF", "nav": 520.5, "price": 522.3, "total_assets": 5200,
-             "expense_ratio": 0.09, "tracking_index": "S&P 500",
-             "top_holdings": [{"name": "Apple", "weight": 7.1}, {"name": "Microsoft", "weight": 6.8},
-                              {"name": "NVIDIA", "weight": 5.2}, {"name": "Amazon", "weight": 3.8},
-                              {"name": "Meta", "weight": 2.5}],
-             "sector_allocation": {"科技": 31.2, "医疗": 12.5, "金融": 13.1, "消费": 10.8, "工业": 8.5, "其他": 23.9}},
-            {"symbol": "QQQ", "name": "Invesco QQQ", "nav": 450.2, "price": 453.8, "total_assets": 2800,
-             "expense_ratio": 0.20, "tracking_index": "纳斯达克100",
-             "top_holdings": [{"name": "Apple", "weight": 11.2}, {"name": "Microsoft", "weight": 10.5},
-                              {"name": "NVIDIA", "weight": 8.2}, {"name": "Amazon", "weight": 5.8},
-                              {"name": "Meta", "weight": 4.2}],
-             "sector_allocation": {"科技": 52.3, "消费": 16.5, "医疗": 6.8, "工业": 5.2, "通信": 3.8, "其他": 15.4}},
-            {"symbol": "IWM", "name": "iShares罗素2000", "nav": 215.8, "price": 217.2, "total_assets": 650,
-             "expense_ratio": 0.19, "tracking_index": "罗素2000指数",
-             "top_holdings": [{"name": "Super Micro Computer", "weight": 0.6}, {"name": "Tenet Healthcare", "weight": 0.5},
-                              {"name": "e.l.f. Beauty", "weight": 0.4}, {"name": "First Solar", "weight": 0.4},
-                              {"name": "Insulet", "weight": 0.4}],
-             "sector_allocation": {"科技": 15.2, "医疗": 14.8, "金融": 16.5, "工业": 14.2, "消费": 12.1, "其他": 27.2}},
-            {"symbol": "VTI", "name": "Vanguard全市场ETF", "nav": 268.5, "price": 270.1, "total_assets": 4200,
-             "expense_ratio": 0.03, "tracking_index": "CRSP US Total Market",
-             "top_holdings": [{"name": "Apple", "weight": 5.8}, {"name": "Microsoft", "weight": 5.5},
-                              {"name": "NVIDIA", "weight": 4.2}, {"name": "Amazon", "weight": 3.1},
-                              {"name": "Meta", "weight": 2.1}],
-             "sector_allocation": {"科技": 28.5, "医疗": 11.8, "金融": 12.5, "消费": 10.2, "工业": 8.8, "其他": 28.2}},
-            {"symbol": "ARKK", "name": "ARK Innovation", "nav": 52.8, "price": 53.5, "total_assets": 85,
-             "expense_ratio": 0.75, "tracking_index": "主动管理",
-             "top_holdings": [{"name": "Tesla", "weight": 12.5}, {"name": "Roku", "weight": 8.2},
-                              {"name": "Block", "weight": 7.5}, {"name": "CRISPR Therapeutics", "weight": 6.8},
-                              {"name": "Zoom", "weight": 5.5}],
-             "sector_allocation": {"科技": 42.5, "医疗": 18.2, "消费": 15.8, "金融": 5.2, "工业": 3.5, "其他": 14.8}},
-        ],
-    }
+        """获取单个加密货币行情（Binance 真实数据）"""
+        cache_key = f"crypto_quote:{symbol}"
+        cached = _APICache.get(cache_key)
+        if cached is not None:
+            return cached
+        try:
+            binance_symbol = symbol.replace("/", "").replace("-", "").upper()
+            if not binance_symbol.endswith("USDT"):
+                binance_symbol += "USDT"
+            resp = requests.get(
+                f"https://api.binance.com/api/v3/ticker/24hr",
+                params={"symbol": binance_symbol},
+                timeout=10
+            )
+            if resp.status_code == 200:
+                d = resp.json()
+                result = {
+                    "symbol": d["symbol"],
+                    "name": cls._CRYPTO_NAMES.get(d["symbol"].replace("USDT", ""), d["symbol"]),
+                    "last_price": float(d["lastPrice"]),
+                    "change_24h": float(d["priceChangePercent"]),
+                    "high_24h": float(d["highPrice"]),
+                    "low_24h": float(d["lowPrice"]),
+                    "volume_24h": float(d["volume"]),
+                    "market_cap": float(d["quoteVolume"]),
+                }
+                _APICache.set(cache_key, result)
+                return result
+        except Exception as e:
+            logger.warning(f"Binance 行情获取失败: {e}")
+        result = cls._generate_mock_crypto_quote(symbol)
+        _APICache.set(cache_key, result)
+        return result
 
     @classmethod
-    def get_etf_list(cls, market: Optional[str] = None) -> list:
-        """获取 ETF 基金列表"""
-        etfs = []
-        markets = [market] if market else list(cls._ETF_DATA.keys())
-        for m in markets:
-            if m not in cls._ETF_DATA:
-                continue
-            for etf in cls._ETF_DATA[m]:
-                price = round(etf["price"] * (1 + random.uniform(-0.01, 0.01)), 3)
-                nav = etf["nav"]
-                premium_rate = round((price - nav) / nav * 100, 2)
-                etfs.append({
-                    "symbol": etf["symbol"],
-                    "name": etf["name"],
-                    "market": m,
-                    "nav": nav,
-                    "price": price,
-                    "premium_rate": premium_rate,
-                    "total_assets": etf["total_assets"],
-                    "expense_ratio": etf["expense_ratio"],
-                    "tracking_index": etf["tracking_index"],
-                })
-        return etfs
+    def get_crypto_klines(cls, symbol: str, interval: str = "1d", limit: int = 100) -> list:
+        """获取加密货币K线（Binance 真实数据）"""
+        cache_key = f"crypto_klines:{symbol}:{interval}:{limit}"
+        cached = _APICache.get(cache_key)
+        if cached is not None:
+            return cached
+        try:
+            binance_symbol = symbol.replace("/", "").replace("-", "").upper()
+            if not binance_symbol.endswith("USDT"):
+                binance_symbol += "USDT"
+            # 映射间隔
+            interval_map = {"1m": "1m", "5m": "5m", "15m": "15m", "1h": "1h", "4h": "4h", "1d": "1d"}
+            binance_interval = interval_map.get(interval, "1d")
+
+            resp = requests.get(
+                "https://api.binance.com/api/v3/klines",
+                params={"symbol": binance_symbol, "interval": binance_interval, "limit": min(limit, 1000)},
+                timeout=15
+            )
+            if resp.status_code == 200:
+                klines = resp.json()
+                result = [{
+                    "timestamp": k[0],
+                    "open": float(k[1]),
+                    "high": float(k[2]),
+                    "low": float(k[3]),
+                    "close": float(k[4]),
+                    "volume": float(k[5]),
+                    "close_time": k[6],
+                    "quote_volume": float(k[7]),
+                    "trades": k[8],
+                } for k in klines]
+                _APICache.set(cache_key, result)
+                return result
+        except Exception as e:
+            logger.warning(f"Binance K线获取失败: {e}")
+        result = cls._generate_mock_crypto_klines(symbol, interval, limit)
+        _APICache.set(cache_key, result)
+        return result
+
+    # ==================== ETF 相关（akshare 真实数据） ====================
+
+    @classmethod
+    def get_etf_list(cls, market: str = "A") -> list:
+        """获取ETF列表（akshare 真实数据，失败降级到模拟）"""
+        cache_key = f"etf_list:{market}"
+        cached = _APICache.get(cache_key)
+        if cached is not None:
+            return cached
+        try:
+            import akshare as ak
+            # 使用新浪 ETF 实时行情接口（返回 代码/名称/最新价/涨跌幅/成交量等）
+            df = ak.fund_etf_category_sina(symbol="ETF基金")
+            if df is not None and len(df) > 0:
+                etfs = []
+                for _, row in df.head(200).iterrows():
+                    code = str(row.get("代码", ""))
+                    # 根据代码前缀判断市场
+                    etf_market = "A"
+                    if code.startswith("hk"):
+                        etf_market = "HK"
+                    elif code.startswith("us"):
+                        etf_market = "US"
+                    if market and market != "A" and etf_market != market:
+                        continue
+                    etfs.append({
+                        "symbol": code,
+                        "name": str(row.get("名称", "")),
+                        "market": etf_market,
+                        "nav": 0,
+                        "price": float(row.get("最新价", 0) or 0),
+                        "premium_rate": 0,
+                    })
+                _APICache.set(cache_key, etfs)
+                return etfs
+        except Exception as e:
+            logger.warning(f"akshare ETF数据获取失败: {e}")
+        # 降级到模拟数据
+        result = cls._generate_mock_etf_list(market)
+        _APICache.set(cache_key, result)
+        return result
 
     @classmethod
     def get_etf_detail(cls, symbol: str, market: Optional[str] = None) -> dict:
@@ -498,66 +856,6 @@ class MultiMarketService:
         return {"symbol": symbol, "error": "ETF不存在"}
 
     # ==================== 全球市场时区 ====================
-
-    # 各市场交易时间配置
-    _MARKET_HOURS = {
-        "A": {  # A股
-            "timezone": "Asia/Shanghai",
-            "open_time": "09:30",
-            "close_time": "15:00",
-            "morning_open": "09:30",
-            "morning_close": "11:30",
-            "afternoon_open": "13:00",
-            "afternoon_close": "15:00",
-            "pre_market_start": "09:15",
-            "pre_market_end": "09:25",
-        },
-        "HK": {  # 港股
-            "timezone": "Asia/Hong_Kong",
-            "open_time": "09:30",
-            "close_time": "16:00",
-            "morning_open": "09:30",
-            "morning_close": "12:00",
-            "afternoon_open": "13:00",
-            "afternoon_close": "16:00",
-            "pre_market_start": "09:00",
-            "pre_market_end": "09:30",
-        },
-        "US": {  # 美股
-            "timezone": "America/New_York",
-            "open_time": "09:30",
-            "close_time": "16:00",
-            "pre_market_start": "04:00",
-            "pre_market_end": "09:30",
-            "after_hours_start": "16:00",
-            "after_hours_end": "20:00",
-        },
-        "UK": {  # 伦敦
-            "timezone": "Europe/London",
-            "open_time": "08:00",
-            "close_time": "16:30",
-        },
-        "JP": {  # 日本
-            "timezone": "Asia/Tokyo",
-            "open_time": "09:00",
-            "close_time": "15:00",
-            "morning_open": "09:00",
-            "morning_close": "11:30",
-            "afternoon_open": "12:30",
-            "afternoon_close": "15:00",
-        },
-        "DE": {  # 德国
-            "timezone": "Europe/Berlin",
-            "open_time": "09:00",
-            "close_time": "17:30",
-        },
-        "CRYPTO": {  # 加密货币（24/7）
-            "timezone": "UTC",
-            "open_time": "00:00",
-            "close_time": "23:59",
-            "is_24h": True,
-        },
-    }
 
     @classmethod
     def _get_market_status(cls, market: str) -> str:
@@ -657,20 +955,6 @@ class MultiMarketService:
 
     # ==================== 跨市场套利 ====================
 
-    # 模拟跨市场标的对
-    _CROSS_MARKET_PAIRS = [
-        {"symbol_a": "510300", "market_a": "A", "symbol_b": "2822.HK", "market_b": "HK", "name": "沪深300 A/H"},
-        {"symbol_a": "510050", "market_a": "A", "symbol_b": "2822.HK", "market_b": "HK", "name": "上证50 A/H"},
-        {"symbol_a": "SPY", "market_a": "US", "symbol_b": "2822.HK", "market_b": "HK", "name": "标普500/恒指"},
-        {"symbol_a": "QQQ", "market_a": "US", "symbol_b": "3188.HK", "market_b": "HK", "name": "纳指100/恒生科技"},
-        {"symbol_a": "IF", "market_a": "A", "symbol_b": "SPY", "market_b": "US", "name": "沪深300期货/标普500"},
-        {"symbol_a": "AU", "market_a": "A", "symbol_b": "GLD", "market_b": "US", "name": "黄金期货/黄金ETF"},
-        {"symbol_a": "BTC/USDT", "market_a": "CRYPTO", "symbol_b": "COIN", "market_b": "US", "name": "BTC/Coinbase"},
-        {"symbol_a": "510300", "market_a": "A", "symbol_b": "SPY", "market_b": "US", "name": "沪深300/标普500"},
-        {"symbol_a": "T", "market_a": "A", "symbol_b": "TLT", "market_b": "US", "name": "国债期货/美债ETF"},
-        {"symbol_a": "CU", "market_a": "A", "symbol_b": "CPER", "market_b": "US", "name": "沪铜/铜ETF"},
-    ]
-
     @classmethod
     def detect_arbitrage_opportunity(cls, symbol_a: str, market_a: str,
                                       symbol_b: str, market_b: str) -> dict:
@@ -758,42 +1042,37 @@ class MultiMarketService:
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
 
+    # ==================== 全球市场概览（真实数据 + 降级） ====================
+
     @classmethod
     def get_global_market_overview(cls) -> dict:
-        """全球市场概览（各市场主要指数）"""
-        # 各市场主要指数
-        indices = [
-            {"symbol": "000001.SH", "name": "上证指数", "market": "A", "price": 3150.5,
-             "change_pct": round(random.uniform(-2, 2), 2)},
-            {"symbol": "399001.SZ", "name": "深证成指", "market": "A", "price": 10250.8,
-             "change_pct": round(random.uniform(-2.5, 2.5), 2)},
-            {"symbol": "399006.SZ", "name": "创业板指", "market": "A", "price": 2050.3,
-             "change_pct": round(random.uniform(-3, 3), 2)},
-            {"symbol": "HSI", "name": "恒生指数", "market": "HK", "price": 18250.5,
-             "change_pct": round(random.uniform(-2, 2), 2)},
-            {"symbol": "HSCEI", "name": "国企指数", "market": "HK", "price": 6350.2,
-             "change_pct": round(random.uniform(-2, 2), 2)},
-            {"symbol": "IXIC", "name": "纳斯达克指数", "market": "US", "price": 16850.3,
-             "change_pct": round(random.uniform(-2, 2), 2)},
-            {"symbol": "SPX", "name": "标普500指数", "market": "US", "price": 5350.8,
-             "change_pct": round(random.uniform(-1.5, 1.5), 2)},
-            {"symbol": "DJI", "name": "道琼斯指数", "market": "US", "price": 39850.5,
-             "change_pct": round(random.uniform(-1.5, 1.5), 2)},
-            {"symbol": "N225", "name": "日经225指数", "market": "JP", "price": 40250.8,
-             "change_pct": round(random.uniform(-2, 2), 2)},
-            {"symbol": "FTSE", "name": "富时100指数", "market": "UK", "price": 8250.5,
-             "change_pct": round(random.uniform(-1.5, 1.5), 2)},
-            {"symbol": "GDAXI", "name": "德国DAX指数", "market": "DE", "price": 18550.2,
-             "change_pct": round(random.uniform(-1.5, 1.5), 2)},
-            {"symbol": "BTC", "name": "比特币", "market": "CRYPTO", "price": 67500,
-             "change_pct": round(random.uniform(-5, 5), 2)},
-        ]
+        """全球市场概览（真实数据 + 降级）"""
+        # 尝试从 akshare 获取真实指数数据
+        indices = []
+        cache_key = "global_indices"
+        cached = _APICache.get(cache_key)
+        if cached is not None:
+            indices = cached
+        else:
+            try:
+                import akshare as ak
+                df = ak.index_us_stock_sina()
+                if df is not None and len(df) > 0:
+                    # 取最后一条（最新数据）
+                    for _, row in df.tail(20).iterrows():
+                        indices.append({
+                            "name": str(row.get("date", "")),
+                            "close": float(row.get("close", 0)),
+                            "change": float(row.get("close", 0)) - float(row.get("open", 0)),
+                        })
+            except Exception as e:
+                logger.warning(f"全球指数获取失败: {e}")
 
-        # 添加随机波动
-        for idx in indices:
-            idx["price"] = round(idx["price"] * (1 + random.uniform(-0.005, 0.005)), 2)
+            if not indices:
+                indices = cls._generate_mock_indices()
+            _APICache.set(cache_key, indices)
 
-        # 获取各市场状态
+        # 市场状态仍然用真实时区计算
         market_status = cls.get_all_market_status()
 
         # 获取套利机会
