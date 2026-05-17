@@ -1,0 +1,146 @@
+{
+  "best_params": {
+    "population_size": 75,
+    "n_generations": 40,
+    "crossover_rate": 0.5375840678988003,
+    "mutation_rate": 0.3169430860474386,
+    "elite_ratio": 0.1975876640809232,
+    "max_expr_depth": 7
+  },
+  "best_value": 1.5631390160703085,
+  "best_factor": "Mul(If(Sub(Le(Max(Lt(Div(30, $volume), Abs(3)), Sum($close, 15)), Sum($volume, 3)), Div(If(Std($close, 60), If(Sum($volume, 10), Div($close, $open), Div($open, $volume)), And(Sub($open, 60), Max($open, 20))), Add(Gt(Ref($volume, 20), Max($high, $high)), Mean($low, 60)))), Div(Std($low, 1), Lt(Log(Abs(Le($low, $close))), Gt(Le(And($high, 60), EMA($open, 10)), Div(If(3, 15, $low), If($close, $close, $low))))), Lt(Log(Sum($low, 30)), Mean($open, 5))), If(And(Std($low, 5), Mul(Ge(Ge(Abs(1), Min(2, $volume)), Mean($low, 30)), Lt(Sum($high, 15), Div(Gt($high, $open), Mul(15, 15))))), Log(Sum($high, 30)), Sum($high, 30)))",
+  "n_trials": 50,
+  "total_time": 89.03088974952698,
+  "top_trials": [
+    {
+      "rank": 1,
+      "params": {
+        "population_size": 75,
+        "n_generations": 40,
+        "crossover_rate": 0.5375840678988003,
+        "mutation_rate": 0.3169430860474386,
+        "elite_ratio": 0.1975876640809232,
+        "max_expr_depth": 7
+      },
+      "value": 1.5631390160703085,
+      "factor": "Mul(If(Sub(Le(Max(Lt(Div(30, $volume), Abs(3)), Sum($close, 15)), Sum($volume, 3)), Div(If(Std($close, 60), If(Sum($volume, 10), Div($close, $open), Div($open, $volume)), And(Sub($open, 60), Max($open, 20))), Add(Gt(Ref($volume, 20), Max($high, $high)), Mean($low, 60)))), Div(Std($low, 1), Lt(Log(Abs(Le($low, $close))), Gt(Le(And($high, 60), EMA($open, 10)), Div(If(3, 15, $low), If($close, $close, $low))))), Lt(Log(Sum($low, 30)), Mean($open, 5))), If(And(Std($low, 5), Mul(Ge(Ge(Abs(1), Min(2, $volume)), Mean($low, 30)), Lt(Sum($high, 15), Div(Gt($high, $open), Mul(15, 15))))), Log(Sum($high, 30)), Sum($high, 30)))"
+    },
+    {
+      "rank": 2,
+      "params": {
+        "population_size": 100,
+        "n_generations": 20,
+        "crossover_rate": 0.4911467275667496,
+        "mutation_rate": 0.3141684898494354,
+        "elite_ratio": 0.14430233428730552,
+        "max_expr_depth": 4
+      },
+      "value": 1.555465539928218,
+      "factor": "Min(Div(Sub(Le($volume, $volume), Max(20, 5)), Sum($close, 30)), If(Sum($close, 60), Div(Ge($close, $close), Ge($open, $volume)), Le(Abs($close), Std($open, 10))))"
+    },
+    {
+      "rank": 3,
+      "params": {
+        "population_size": 150,
+        "n_generations": 30,
+        "crossover_rate": 0.4325257964926398,
+        "mutation_rate": 0.38210993803866666,
+        "elite_ratio": 0.24312640661491186,
+        "max_expr_depth": 7
+      },
+      "value": 1.456685310139763,
+      "factor": "Add(Mul(Min(Sum($close, 3), Max(Add(Gt(Min(1, $volume), Sub($volume, 15)), Log(Ge($volume, $open))), Min(Gt(Add($high, $volume), Ref($volume, 3)), And(Mean($close, 3), Le($close, 15))))), Add(Max(Ge(Gt(And($low, $open), If($volume, $high, 30)), Le(Log(1), Gt(2, 3))), Abs(Ref($high, 60))), If(Log(Max(And($low, 2), Sub(10, $open))), Max(Lt(Ge($open, $volume), Log($low)), Gt(Div(2, $open), Max($volume, $close))), Log(Min(Gt($high, $open), Sub($volume, $volume)))))), Ge(Abs(And(Lt(Sub(Sub(30, $close), Mean($close, 3)), Lt(Mul(20, $open), Ge(3, $volume))), Max(Gt(Abs($volume), Ref($low, 5)), Sub(Sub($low, $close), And($close, $high))))), Div(Mul(Sub(Min(Abs(60), EMA($volume, 2)), Min(Div($volume, $close), Mean($open, 15))), Abs(Abs(Sub($volume, $low)))), Ge(Mean($open, 10), And(Max(Gt($high, $close), If(3, $high, $close)), Std($high, 60))))))"
+    },
+    {
+      "rank": 4,
+      "params": {
+        "population_size": 125,
+        "n_generations": 20,
+        "crossover_rate": 0.5602381051770724,
+        "mutation_rate": 0.3139841613038967,
+        "elite_ratio": 0.13877844326164784,
+        "max_expr_depth": 6
+      },
+      "value": 1.3915471446223417,
+      "factor": "Log(Add(Gt(Sum($low, 1), Lt(Lt(Gt(15, $open), Min($open, $low)), Sub(Ref($low, 30), Max($close, $high)))), Div(Sum($close, 2), Le(Ref($low, 2), Std($low, 30)))))"
+    },
+    {
+      "rank": 5,
+      "params": {
+        "population_size": 75,
+        "n_generations": 20,
+        "crossover_rate": 0.573606050470587,
+        "mutation_rate": 0.397015653032851,
+        "elite_ratio": 0.12632988231956274,
+        "max_expr_depth": 7
+      },
+      "value": 1.279671531109472,
+      "factor": "If(Gt(Div(Mul(Ref($volume, 2), Div(And(Ref($volume, 5), If($low, $low, 5)), Mean($high, 60))), If(Sum($close, 2), Ref($close, 3), Gt(Log(Sum($high, 5)), Lt(Min($low, $open), Log($close))))), Abs(Abs(Le(Sum($low, 3), Gt(EMA($close, 10), Div($volume, $open)))))), Abs(Div(And(Div(Gt(Min($open, $low), Lt($close, 20)), If(Gt($volume, 5), Ref($high, 60), Log($low))), Gt(EMA($open, 15), Mean($low, 10))), Gt(Log(Ge(Sub(30, 1), Le($close, $open))), Ref($close, 2)))), Std($low, 30))"
+    },
+    {
+      "rank": 6,
+      "params": {
+        "population_size": 125,
+        "n_generations": 30,
+        "crossover_rate": 0.8847923138822793,
+        "mutation_rate": 0.3212964881763901,
+        "elite_ratio": 0.2378997883128378,
+        "max_expr_depth": 7
+      },
+      "value": 1.277204845914793,
+      "factor": "Div(Std($close, 30), Gt(Gt(Lt(Ge(Abs(Mean($low, 2)), Mul(Min($high, $close), Std($low, 60))), Le(Log(Std($open, 3)), Mul(Gt($volume, $open), Ref($low, 20)))), Lt(Mul(Sum($high, 60), Le(EMA($open, 10), Lt($high, 30))), Add(If(Lt(2, $volume), Ref($low, 2), Div(1, 20)), Add(Ge($volume, $high), Sum($close, 60))))), Abs(Ge(Std($high, 1), Sum($close, 1)))))"
+    },
+    {
+      "rank": 7,
+      "params": {
+        "population_size": 100,
+        "n_generations": 40,
+        "crossover_rate": 0.878988087453822,
+        "mutation_rate": 0.3433719588521957,
+        "elite_ratio": 0.20235610655495911,
+        "max_expr_depth": 7
+      },
+      "value": 1.2721997166341863,
+      "factor": "If(Std($high, 60), Min(Abs(Div(Le(EMA($open, 20), Mean($high, 5)), Abs(And(Add(60, $low), Sub(15, $open))))), Min(And(Gt(Sum($volume, 30), Std($open, 3)), If(If(Div(20, $high), Log($volume), Le(15, $volume)), Gt(Gt($close, 5), Ge($low, $low)), And(Min($volume, 10), Max($high, $low)))), Div(Log(Gt(Log(20), And($high, $close))), Gt(Min(Abs($close), Sum($low, 10)), Ref($volume, 10))))), Std($high, 30))"
+    },
+    {
+      "rank": 8,
+      "params": {
+        "population_size": 150,
+        "n_generations": 50,
+        "crossover_rate": 0.40992022489920565,
+        "mutation_rate": 0.3524472104726142,
+        "elite_ratio": 0.21295031250532326,
+        "max_expr_depth": 6
+      },
+      "value": 1.2638173269268544,
+      "factor": "Mul(Add(Lt(Mean($high, 2), Sub(Gt(Abs($open), Log(30)), EMA($close, 2))), Div(If(Ref($volume, 10), Mean($volume, 3), Lt(Ref($low, 60), EMA($close, 2))), If(Le(Min(30, $volume), Std($open, 20)), Ge(Ref($volume, 60), And($open, $high)), And(Le($volume, $high), Lt($high, $volume))))), EMA($open, 10))"
+    },
+    {
+      "rank": 9,
+      "params": {
+        "population_size": 200,
+        "n_generations": 40,
+        "crossover_rate": 0.6386026669289625,
+        "mutation_rate": 0.3083344197441814,
+        "elite_ratio": 0.23094833737710638,
+        "max_expr_depth": 6
+      },
+      "value": 1.1939780428683957,
+      "factor": "If(Std($open, 60), Mul(Log(Gt(Min(Max($low, 5), Lt($close, $volume)), Mean($volume, 30))), And(Ge(And(Min($low, $low), Mul($close, $open)), And(And($open, 5), Le(1, $open))), Le(Gt(EMA($low, 5), Div($close, $close)), Lt(Log(30), Max($open, $volume))))), Ge(Add(EMA($open, 60), Abs(Add(Mean($low, 5), EMA($volume, 10)))), Lt(Sub(If(Le($open, $low), Max(60, $open), Add(20, $close)), Abs(Add($low, $volume))), EMA($high, 2))))"
+    },
+    {
+      "rank": 10,
+      "params": {
+        "population_size": 125,
+        "n_generations": 30,
+        "crossover_rate": 0.427217920774312,
+        "mutation_rate": 0.3823525251265215,
+        "elite_ratio": 0.23734540661160763,
+        "max_expr_depth": 3
+      },
+      "value": 1.1794730160051934,
+      "factor": "Log(Log(Sub($high, $open)))"
+    }
+  ]
+}

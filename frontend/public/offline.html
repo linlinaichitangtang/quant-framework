@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenClaw - 离线模式</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f0f2f5;
+      color: #303133;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .offline-container {
+      text-align: center;
+      max-width: 400px;
+      width: 100%;
+    }
+
+    .offline-icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      background: linear-gradient(135deg, #304156, #409EFF);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(48, 65, 86, 0.3);
+    }
+
+    .offline-icon svg {
+      width: 40px;
+      height: 40px;
+      fill: #fff;
+    }
+
+    .offline-title {
+      font-size: 22px;
+      font-weight: 600;
+      color: #303133;
+      margin-bottom: 8px;
+    }
+
+    .offline-subtitle {
+      font-size: 14px;
+      color: #909399;
+      margin-bottom: 32px;
+      line-height: 1.6;
+    }
+
+    .retry-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 32px;
+      background-color: #409EFF;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      box-shadow: 0 2px 8px rgba(64, 158, 255, 0.3);
+    }
+
+    .retry-btn:hover {
+      background-color: #337ecc;
+    }
+
+    .retry-btn:active {
+      background-color: #2a6cb8;
+    }
+
+    .retry-btn svg {
+      width: 18px;
+      height: 18px;
+      margin-right: 8px;
+      fill: #fff;
+    }
+
+    .cached-data {
+      margin-top: 32px;
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+      text-align: left;
+    }
+
+    .cached-data-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: #606266;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .cached-data-title::before {
+      content: '';
+      display: inline-block;
+      width: 3px;
+      height: 14px;
+      background: #409EFF;
+      border-radius: 2px;
+    }
+
+    .cached-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #f0f2f5;
+      font-size: 13px;
+    }
+
+    .cached-item:last-child {
+      border-bottom: none;
+    }
+
+    .cached-item-label {
+      color: #909399;
+    }
+
+    .cached-item-value {
+      color: #303133;
+      font-weight: 500;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: #F56C6C;
+      margin-right: 6px;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .brand {
+      margin-top: 40px;
+      font-size: 12px;
+      color: #C0C4CC;
+    }
+  </style>
+</head>
+<body>
+  <div class="offline-container">
+    <div class="offline-icon">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+      </svg>
+    </div>
+
+    <h1 class="offline-title"><span class="status-dot"></span>网络连接已断开</h1>
+    <p class="offline-subtitle">
+      无法连接到 OpenClaw 服务器。<br>
+      请检查您的网络连接后重试。
+    </p>
+
+    <button class="retry-btn" onclick="retryConnection()">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+      </svg>
+      重新连接
+    </button>
+
+    <!-- 缓存数据摘要 -->
+    <div class="cached-data" id="cachedData" style="display: none;">
+      <div class="cached-data-title">缓存数据摘要</div>
+      <div id="cachedContent"></div>
+    </div>
+
+    <div class="brand">OpenClaw 量化交易监控</div>
+  </div>
+
+  <script>
+    // 重新连接
+    function retryConnection() {
+      if (navigator.onLine) {
+        window.location.href = '/';
+      } else {
+        // 显示重试提示
+        const btn = document.querySelector('.retry-btn');
+        btn.textContent = '正在重试...';
+        btn.disabled = true;
+
+        setTimeout(() => {
+          if (navigator.onLine) {
+            window.location.href = '/';
+          } else {
+            btn.innerHTML = `
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="width:18px;height:18px;margin-right:8px;fill:#fff;">
+                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+              </svg>
+              重新连接
+            `;
+            btn.disabled = false;
+            alert('网络仍未连接，请检查网络设置');
+          }
+        }, 2000);
+      }
+    }
+
+    // 监听网络恢复
+    window.addEventListener('online', () => {
+      window.location.href = '/';
+    });
+
+    // 尝试显示缓存数据
+    async function showCachedData() {
+      try {
+        const db = await new Promise((resolve, reject) => {
+          const request = indexedDB.open('openclaw-offline', 1);
+          request.onsuccess = (e) => resolve(e.target.result);
+          request.onerror = (e) => reject(e.target.error);
+        });
+
+        if (!db.objectStoreNames.contains('pending-requests')) return;
+
+        const tx = db.transaction('pending-requests', 'readonly');
+        const store = tx.objectStore('pending-requests');
+        const countRequest = store.count();
+
+        countRequest.onsuccess = () => {
+          const count = countRequest.result;
+          if (count > 0) {
+            document.getElementById('cachedData').style.display = 'block';
+            document.getElementById('cachedContent').innerHTML = `
+              <div class="cached-item">
+                <span class="cached-item-label">待发送请求</span>
+                <span class="cached-item-value">${count} 条</span>
+              </div>
+              <div class="cached-item">
+                <span class="cached-item-label">状态</span>
+                <span class="cached-item-value" style="color: #E6A23C;">等待网络恢复</span>
+              </div>
+            `;
+          }
+        };
+      } catch (e) {
+        // IndexedDB 不可用，忽略
+      }
+    }
+
+    showCachedData();
+  </script>
+</body>
+</html>

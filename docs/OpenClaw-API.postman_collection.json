@@ -1,0 +1,387 @@
+{
+  "info": {
+    "name": "OpenClaw API",
+    "description": "OpenClaw量化交易平台 API 集合",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000/api/v1"
+    },
+    {
+      "key": "token",
+      "value": ""
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "认证",
+      "item": [
+        {
+          "name": "登录",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "header": [],
+            "body": {
+              "mode": "json",
+              "raw": "{\"username\": \"admin\", \"password\": \"admin123\"}"
+            }
+          }
+        },
+        {
+          "name": "注册",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/register",
+            "header": [],
+            "body": {
+              "mode": "json",
+              "raw": "{\"username\": \"testuser\", \"password\": \"test123456\", \"email\": \"test@example.com\"}"
+            }
+          }
+        },
+        {
+          "name": "刷新Token",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/refresh",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "股票信息",
+      "item": [
+        {
+          "name": "获取股票列表",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/stocks?market=A&page=1&page_size=50",
+              "query": [
+                {"key": "market", "value": "A"},
+                {"key": "page", "value": "1"},
+                {"key": "page_size", "value": "50"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "获取单个股票",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/stocks/000001"
+          }
+        }
+      ]
+    },
+    {
+      "name": "行情数据",
+      "item": [
+        {
+          "name": "获取K线",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/bars/000001?bar_type=1d&start_date=2024-01-01&end_date=2024-12-31",
+              "query": [
+                {"key": "bar_type", "value": "1d"},
+                {"key": "start_date", "value": "2024-01-01"},
+                {"key": "end_date", "value": "2024-12-31"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "选股信号",
+      "item": [
+        {
+          "name": "生成选股信号",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/signals/generate",
+            "header": [],
+            "body": {
+              "mode": "json",
+              "raw": "{\"strategy_type\": \"a_stock_short_term\", \"market\": \"A\", \"limit\": 10}"
+            }
+          }
+        },
+        {
+          "name": "获取信号列表",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/signals?page=1&page_size=20",
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "page_size", "value": "20"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "获取信号详情",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/signals/{signal_id}"
+          }
+        },
+        {
+          "name": "获取信号追溯信息",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/signals/{signal_id}/reason"
+          }
+        }
+      ]
+    },
+    {
+      "name": "持仓管理",
+      "item": [
+        {
+          "name": "获取持仓列表",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/positions"
+          }
+        },
+        {
+          "name": "获取账户持仓",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/accounts/{account_id}/positions"
+          }
+        }
+      ]
+    },
+    {
+      "name": "交易账户",
+      "item": [
+        {
+          "name": "获取账户列表",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/accounts"
+          }
+        },
+        {
+          "name": "创建账户",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/accounts",
+            "body": {
+              "mode": "json",
+              "raw": "{\"name\": \"我的实盘账户\", \"market\": \"A\", \"trd_env\": \"SIMULATE\"}"
+            }
+          }
+        },
+        {
+          "name": "切换交易环境",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/accounts/{account_id}/switch-env",
+            "body": {
+              "mode": "json",
+              "raw": "{\"trd_env\": \"REAL\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "回测分析",
+      "item": [
+        {
+          "name": "运行回测",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/backtest",
+            "body": {
+              "mode": "json",
+              "raw": "{\"strategy_type\": \"a_stock_short_term\", \"initial_capital\": 1000000, \"start_date\": \"2024-01-01\", \"end_date\": \"2024-12-31\"}"
+            }
+          }
+        },
+        {
+          "name": "获取回测结果",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/backtest/{backtest_id}"
+          }
+        },
+        {
+          "name": "导出回测报告",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/backtest/{backtest_id}/export?format=csv",
+              "query": [
+                {"key": "format", "value": "csv"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "风控规则",
+      "item": [
+        {
+          "name": "获取风控规则列表",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/risk/rules"
+          }
+        },
+        {
+          "name": "创建风控规则",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/risk/rules",
+            "body": {
+              "mode": "json",
+              "raw": "{\"name\": \"单票止损\", \"rule_type\": \"stop_loss\", \"market\": \"A\", \"params\": \"{\\\"max_loss_pct\\\": 2}\"}"
+            }
+          }
+        },
+        {
+          "name": "执行风控检查",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/risk/check",
+            "body": {
+              "mode": "json",
+              "raw": "{\"account_id\": 1, \"market\": \"A\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "期权分析",
+      "item": [
+        {
+          "name": "获取期权链",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/options/chain/AAPL"
+          }
+        },
+        {
+          "name": "计算希腊字母",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/options/greeks",
+            "body": {
+              "mode": "json",
+              "raw": "{\"symbol\": \"AAPL\", \"strike\": 150, \"expiry\": \"2024-12-20\", \"option_type\": \"call\", \"spot_price\": 155}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "机器学习",
+      "item": [
+        {
+          "name": "训练模型",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/ml/train",
+            "body": {
+              "mode": "json",
+              "raw": "{\"model_type\": \"gbdt\", \"features\": [\"ma5\", \"ma20\", \"volume_ratio\"], \"target\": \"next_return\"}"
+            }
+          }
+        },
+        {
+          "name": "获取模型列表",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/ml/models"
+          }
+        },
+        {
+          "name": "模型预测",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/ml/predict",
+            "body": {
+              "mode": "json",
+              "raw": "{\"model_id\": 1, \"symbols\": [\"000001\", \"600000\"]}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "通知设置",
+      "item": [
+        {
+          "name": "获取通知渠道",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/notifications/channels"
+          }
+        },
+        {
+          "name": "配置钉钉Webhook",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/notifications/channels/dingtalk",
+            "body": {
+              "mode": "json",
+              "raw": "{\"webhook_url\": \"https://oapi.dingtalk.com/robot/send?access_token=xxx\"}"
+            }
+          }
+        },
+        {
+          "name": "测试通知",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/notifications/test",
+            "body": {
+              "mode": "json",
+              "raw": "{\"channel\": \"dingtalk\", \"message\": \"测试消息\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "系统",
+      "item": [
+        {
+          "name": "健康检查",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8000/health"
+          }
+        },
+        {
+          "name": "获取系统信息",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/system/info"
+          }
+        }
+      ]
+    }
+  ]
+}
