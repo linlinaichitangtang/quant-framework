@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime, date
@@ -134,6 +134,25 @@ def get_trading_signals(
 @router.get("/signals/{signal_id}", response_model=schemas.TradingSignalResponse)
 def get_trading_signal(signal_id: int, db: Session = Depends(get_db)):
     return crud.get_trading_signal(db, signal_id)
+
+
+@router.get("/signals/{signal_id}/reason", response_model=schemas.SignalReasonResponse)
+def get_signal_reason(signal_id: int, db: Session = Depends(get_db)):
+    """获取信号决策依据（选股理由、触发因子、置信度）"""
+    signal = crud.get_trading_signal(db, signal_id)
+    if not signal:
+        raise HTTPException(status_code=404, detail=f"信号 {signal_id} 不存在")
+    # 从信号记录中提取决策依据
+    return schemas.SignalReasonResponse(
+        signal_id=signal_id,
+        symbol=getattr(signal, "symbol", ""),
+        direction=getattr(signal, "direction", "buy"),
+        strategy=getattr(signal, "strategy_name", getattr(signal, "strategy", "unknown")),
+        reason=getattr(signal, "reason", "基于多因子选股模型触发"),
+        factors=getattr(signal, "factors", {}),
+        confidence=getattr(signal, "confidence", 0.0),
+        created_at=getattr(signal, "created_at", None),
+    )
 
 
 @router.post("/signals", response_model=schemas.TradingSignalResponse)

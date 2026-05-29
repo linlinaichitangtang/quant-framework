@@ -247,6 +247,72 @@ class EmailNotifier:
 
 # ========== 通知调度器 ==========
 
+class FeishuNotifier:
+    """飞书 Webhook 通知"""
+
+    def __init__(self, webhook_url: str):
+        self.webhook_url = webhook_url
+
+    async def send(self, notification: Notification) -> bool:
+        payload = {
+            "msg_type": "interactive",
+            "card": {
+                "header": {
+                    "title": {"tag": "plain_text", "content": f"[OpenClaw] {notification.title}"},
+                    "template": {"info": "blue", "warning": "orange", "error": "red", "critical": "red"}.get(notification.level, "blue"),
+                },
+                "elements": [
+                    {"tag": "div", "text": {"tag": "plain_text", "content": notification.content}},
+                    {"tag": "note", "elements": [
+                        {"tag": "plain_text", "content": f"频道: {notification.channel} · {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"}
+                    ]},
+                ],
+            },
+        }
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(self.webhook_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        return True
+                    logger.error(f"飞书通知返回 {resp.status}")
+                    return False
+        except Exception as e:
+            logger.error(f"飞书通知异常: {e}")
+            return False
+
+
+class TelegramNotifier:
+    """Telegram Bot 通知"""
+
+    def __init__(self, bot_token: str, chat_id: str):
+        self.api_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        self.chat_id = chat_id
+
+    async def send(self, notification: Notification) -> bool:
+        level_emoji = {"info": "ℹ️", "warning": "⚠️", "error": "🔴", "critical": "🚨"}.get(notification.level, "📢")
+        text = (
+            f"{level_emoji} *{notification.title}*\n\n"
+            f"{notification.content}\n\n"
+            f"频道: `{notification.channel}` · {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        payload = {
+            "chat_id": self.chat_id,
+            "text": text,
+            "parse_mode": "Markdown",
+        }
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(self.api_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        return True
+                    body = await resp.text()
+                    logger.error(f"Telegram 通知返回 {resp.status}: {body[:200]}")
+                    return False
+        except Exception as e:
+            logger.error(f"Telegram 通知异常: {e}")
+            return False
+
+
 class NotificationService:
     """统一通知调度服务"""
 
@@ -275,6 +341,17 @@ class NotificationService:
                 smtp_user=getattr(settings, 'smtp_user', None),
                 smtp_password=getattr(settings, 'smtp_password', None),
             )
+
+        # 飞书
+        feishu_url = getattr(settings, 'feishu_webhook_url', None)
+        if feishu_url:
+            self._notifiers['feishu'] = FeishuNotifier(feishu_url)
+
+        # Telegram
+        telegram_token = getattr(settings, 'telegram_bot_token', None)
+        telegram_chat = getattr(settings, 'telegram_chat_id', None)
+        if telegram_token and telegram_chat:
+            self._notifiers['telegram'] = TelegramNotifier(telegram_token, telegram_chat)
 
     def add_notifier(self, name: str, notifier):
         """添加自定义通知渠道"""

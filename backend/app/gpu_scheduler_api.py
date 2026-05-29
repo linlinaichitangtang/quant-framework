@@ -56,7 +56,7 @@ class GPUStatusResponse(BaseModel):
 
 
 @router.post("/tasks", response_model=TaskSubmitResponse)
-def submit_task(
+async def submit_task(
     request: TaskSubmitRequest,
     current_user: dict = Depends(get_current_user)
 ):
@@ -133,12 +133,12 @@ def list_tasks(
 
 
 @router.delete("/tasks/{task_id}")
-def cancel_task(
+async def cancel_task(
     task_id: str,
     current_user: dict = Depends(get_current_user)
 ):
     """取消任务"""
-    success = gpu_scheduler.cancel_task(task_id)
+    success = await gpu_scheduler.cancel_task(task_id)
 
     if not success:
         raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在或无法取消")

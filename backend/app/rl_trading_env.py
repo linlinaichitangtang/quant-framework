@@ -4,8 +4,8 @@
 提供 OpenAI Gym 兼容的交易环境，支持 DQN/PPO 等强化学习算法。
 """
 
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 import numpy as np
 from typing import Tuple, Dict, Any, Optional
 from dataclasses import dataclass

@@ -45,6 +45,11 @@ python-multipart==0.0.6
 # Data Source
 akshare>=1.12.0
 
+# ML / Optimization
+scipy>=1.11.0
+gymnasium>=0.29.0
+PyYAML>=6.0.1
+
 # Testing
 pytest==7.4.4
 pytest-asyncio==0.23.3

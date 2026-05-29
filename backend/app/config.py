@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # ========== 通知配置 ==========
     wechat_webhook_url: Optional[str] = None
     dingtalk_webhook_url: Optional[str] = None
+    feishu_webhook_url: Optional[str] = None
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
     smtp_host: Optional[str] = None
     smtp_port: int = 587
     smtp_user: Optional[str] = None

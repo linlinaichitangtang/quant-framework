@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, TypeVar, Generic
+from typing import Optional, List, Dict, Any, TypeVar, Generic
 from datetime import datetime, date
 from enum import Enum
 
@@ -1217,3 +1217,16 @@ class LeaderboardEntry(BaseModel):
     total_trades: int = 0
     win_rate: float = 0
     total_pnl: float = 0
+
+
+# ========== 信号追溯 ==========
+class SignalReasonResponse(BaseModel):
+    """信号决策依据"""
+    signal_id: int
+    symbol: str
+    direction: str  # buy/sell
+    strategy: str
+    reason: str  # 选股理由说明
+    factors: Dict[str, Any] = {}  # 触发因子及权重
+    confidence: float = 0.0  # 0-1 置信度
+    created_at: Optional[datetime] = None

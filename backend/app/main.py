@@ -2,7 +2,7 @@ import logging
 import logging.config
 import sys
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -15,6 +15,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from .config import settings
 from .database import engine, Base, SessionLocal
 from .cache import init_cache
+from .models import SystemLog
 from .api import router
 from .auth_api import router as auth_router
 from .ws_api import router as ws_router
@@ -32,6 +33,22 @@ from .algo_api import router as algo_router
 from .multi_market_api import router as multi_market_router
 from .community_api import router as community_router
 from .project_api import router as project_router
+from .market_api import router as market_router
+from .strategy_config_api import router as strategy_config_router
+from .strategy_dsl_api import router as strategy_dsl_router
+from .cross_validation_api import router as cross_validation_router
+from .broker_api import router as broker_router
+from .alpha_factors_api import router as alpha_factors_router
+from .bayesian_optimizer_api import router as bayesian_router
+from .rl_api import router as rl_router
+from .factor_synthesis_api import router as factor_synthesis_router
+from .tick_data_api import router as tick_data_router
+from .gpu_scheduler_api import router as gpu_scheduler_router
+try:
+    from .push_api import router as push_router
+except Exception as e:
+    push_router = None
+    print(f"Push routes skipped: {e}")
 
 
 # ========== 结构化日志配置 ==========
@@ -80,8 +97,12 @@ def setup_logging():
 
 logger = setup_logging()
 
-# ========== 创建数据库表 ==========
-Base.metadata.create_all(bind=engine)
+# ========== 数据库初始化（懒加载）==========
+def _init_db():
+    """开发模式下自动建表（生产应使用 Alembic）"""
+    if settings.debug:
+        Base.metadata.create_all(bind=engine)
+        logger.debug("开发模式：已自动创建数据库表")
 
 # ========== API 限流 ==========
 limiter = Limiter(key_func=get_remote_address, default_limits=[settings.rate_limit])
@@ -93,6 +114,9 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动
     from . import crud
+
+    # 开发模式自动建表
+    _init_db()
 
     # 初始化缓存
     init_cache(settings.redis_url)
@@ -234,6 +258,24 @@ app.include_router(algo_router)
 app.include_router(multi_market_router)
 app.include_router(community_router)
 app.include_router(project_router, prefix="/api/v1/project", tags=["项目管理"])
+app.include_router(market_router, prefix="/api/v1/market", tags=["实时行情"])
+app.include_router(strategy_config_router, prefix="/api/v1/strategy/config", tags=["策略参数"])
+app.include_router(strategy_dsl_router, prefix="/api/v1/strategy/dsl", tags=["策略DSL"])
+app.include_router(cross_validation_router, prefix="/api/v1/backtest/cv", tags=["时序交叉验证"])
+app.include_router(broker_router, prefix="/api/v1/broker", tags=["券商适配"])
+app.include_router(alpha_factors_router, prefix="/api/v1/factors", tags=["阿尔法因子"])
+app.include_router(bayesian_router, prefix="/api/v1/ml/bayesian", tags=["贝叶斯优化"])
+app.include_router(rl_router, prefix="/api/v1/ml/rl", tags=["强化学习"])
+app.include_router(factor_synthesis_router, prefix="/api/v1/factors/synthesis", tags=["深度因子合成"])
+app.include_router(tick_data_router, prefix="/api/v1/market/tick", tags=["高频Tick数据"])
+app.include_router(gpu_scheduler_router, prefix="/api/v1/ml/gpu-scheduler", tags=["GPU调度"])
+try:
+    from .ml_api import router as ml_router
+    app.include_router(ml_router, prefix="/api/v1/ml", tags=["深度学习"])
+except Exception as e:
+    logger.warning(f"ML routes skipped (torch or other ML dependency missing): {e}")
+if push_router:
+    app.include_router(push_router, prefix="/api/v1/push", tags=["推送通知"])
 
 # ========== Prometheus 指标 ==========
 Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
